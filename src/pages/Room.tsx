@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import usePartySocket from "partysocket/react";
@@ -22,6 +22,10 @@ const SHITHEAD_LINES = [
   "history will remember this",
   "the cards have spoken. you stink",
 ];
+
+// Hand fan looks great up to ~6 cards. Beyond that, switch to a horizontal scroll
+// strip so cards never overlap the action buttons or each other into illegibility.
+const FAN_LIMIT = 6;
 
 const getOrCreatePlayerId = () => {
   let id = localStorage.getItem("playerId");
@@ -72,7 +76,7 @@ export default function Room() {
 
   if (!playerId || !name) return null;
 
-  const inner = <GameRoom code={roomCode} playerId={playerId} name={name} voiceConnected={voiceConnected} onRequestVoice={requestVoice} hasVoiceToken={!!voiceToken} />;
+  const inner = <GameRoom code={roomCode} playerId={playerId} name={name} voiceConnected={voiceConnected} onRequestVoice={requestVoice} />;
 
   if (voiceToken && voiceUrl) {
     return (
@@ -107,10 +111,9 @@ type GameRoomProps = {
   name: string;
   voiceConnected: boolean;
   onRequestVoice: () => void;
-  hasVoiceToken: boolean;
 };
 
-function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoiceToken }: GameRoomProps) {
+function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice }: GameRoomProps) {
   const nav = useNavigate();
   const [state, setState] = useState<GameState | null>(null);
   const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
@@ -138,7 +141,6 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
           if (msg.state.lastEvent?.type === "burn") triggerFlash("BURN");
           else if (msg.state.lastEvent?.type === "reset") triggerFlash("RESET");
           else if (msg.state.lastEvent?.type === "pickup") triggerFlash("PICK UP");
-          // Pick a random shithead line when game ends
           if (msg.state.phase === "over" && prevPhase !== "over") {
             setShitheadLine(SHITHEAD_LINES[Math.floor(Math.random() * SHITHEAD_LINES.length)]);
           }
@@ -227,6 +229,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
       <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255, 200, 100, 0.12) 0%, transparent 50%)" }} />
 
       <div className="relative z-10 flex flex-col h-screen max-w-md mx-auto px-3 py-2">
+        {/* Header — voice button is persistent and joinable anytime */}
         <div className="flex items-center justify-between pb-2">
           <button onClick={() => nav("/")} className="text-amber-100/50 text-xs tracking-widest">LEAVE</button>
           <button onClick={copyCode} className="flex items-center gap-2 text-amber-100/80 hover:text-amber-100">
@@ -235,7 +238,17 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
             <span className="text-[10px] text-amber-200/60">{copied ? "OK" : "copy"}</span>
           </button>
           <div className="flex items-center gap-2">
-            {voiceConnected ? <VoiceControls /> : <div className="w-12" />}
+            {voiceConnected ? (
+              <VoiceControls />
+            ) : (
+              <button
+                onClick={onRequestVoice}
+                className="px-2 py-1 rounded-sm border border-amber-100/40 text-amber-100/70 hover:text-amber-100 text-[10px] tracking-widest active:scale-95 transition"
+                aria-label="Join voice"
+              >
+                JOIN VOICE
+              </button>
+            )}
             <button
               onClick={() => setShowRules(true)}
               className="w-7 h-7 rounded-full border border-amber-100/40 text-amber-100/70 hover:text-amber-100 hover:border-amber-100/70 flex items-center justify-center text-xs italic transition"
@@ -247,7 +260,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
         </div>
 
         {state.phase === "lobby" && (
-          <Lobby state={state} playerId={playerId} isHost={isHost} onDeal={() => send({ type: "deal" })} voiceConnected={voiceConnected} hasVoiceToken={hasVoiceToken} onRequestVoice={onRequestVoice} />
+          <Lobby state={state} playerId={playerId} isHost={isHost} onDeal={() => send({ type: "deal" })} />
         )}
 
         {state.phase !== "lobby" && me && (
@@ -258,7 +271,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
               ))}
             </div>
 
-            <div className="flex-1 flex items-center justify-center relative">
+            <div className="flex-1 flex items-center justify-center relative min-h-0">
               <div className="flex items-center gap-4">
                 <DeckStack />
                 <PileStack pile={state.pile} />
@@ -471,12 +484,9 @@ type LobbyProps = {
   playerId: string;
   isHost: boolean;
   onDeal: () => void;
-  voiceConnected: boolean;
-  hasVoiceToken: boolean;
-  onRequestVoice: () => void;
 };
 
-function Lobby({ state, playerId, isHost, onDeal, voiceConnected, hasVoiceToken, onRequestVoice }: LobbyProps) {
+function Lobby({ state, playerId, isHost, onDeal }: LobbyProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4">
       <div className="text-amber-100/60 text-xs tracking-[0.4em] uppercase mb-4">The Table</div>
@@ -495,13 +505,6 @@ function Lobby({ state, playerId, isHost, onDeal, voiceConnected, hasVoiceToken,
           <div key={`empty-${i}`} className="border border-dashed border-amber-100/10 px-4 py-3 rounded-sm text-amber-100/30 text-sm">empty seat...</div>
         ))}
       </div>
-
-      {!voiceConnected && !hasVoiceToken && (
-        <button onClick={onRequestVoice} className="mb-3 px-5 py-2 border border-amber-100/40 text-amber-100 rounded-sm tracking-[0.2em] text-xs uppercase active:scale-95 transition">
-          Join Voice Chat
-        </button>
-      )}
-      {voiceConnected && <div className="mb-3 text-emerald-300 text-xs tracking-[0.2em] uppercase">Voice Connected</div>}
 
       {isHost ? (
         <button onClick={onDeal} disabled={state.players.length < 2} className="px-8 py-3 bg-amber-100 text-stone-900 rounded-sm tracking-[0.3em] text-xs uppercase font-semibold disabled:opacity-30 active:scale-95 transition">
@@ -535,10 +538,17 @@ type OpponentProps = {
   voiceConnected: boolean;
 };
 
+// Outer wrapper — never calls LiveKit hooks directly, so it's safe when voice isn't connected.
 function Opponent({ player, active, voiceConnected }: OpponentProps) {
   return (
     <div className={`flex flex-col items-center transition-opacity ${active ? "opacity-100" : "opacity-50"} ${!player.connected ? "opacity-30" : ""}`}>
-      <OpponentVoiceIndicator voiceConnected={voiceConnected} playerId={player.id} playerName={player.name} active={active} />
+      {voiceConnected ? (
+        <OpponentVoiceLabel playerId={player.id} playerName={player.name} active={active} />
+      ) : (
+        <div className="flex items-center gap-1 mb-1">
+          <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : "text-amber-100/50"}`}>{player.name}</div>
+        </div>
+      )}
       <div className="flex gap-0.5 mb-0.5">
         {player.faceDown.slice(0, 3).map((_, i) => (
           <div key={i} className="w-5 h-7 rounded bg-gradient-to-br from-red-900 to-red-950 border border-amber-200/20" />
@@ -557,20 +567,8 @@ function Opponent({ player, active, voiceConnected }: OpponentProps) {
   );
 }
 
-// Separate component so useParticipants is only called when voice is actually connected
-function OpponentVoiceIndicator({ voiceConnected, playerId, playerName, active }: { voiceConnected: boolean; playerId: string; playerName: string; active: boolean }) {
-  if (!voiceConnected) {
-    return (
-      <div className="flex items-center gap-1 mb-1">
-        <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : "text-amber-100/50"}`}>{playerName}</div>
-      </div>
-    );
-  }
-  return <OpponentVoiceIndicatorConnected playerId={playerId} playerName={playerName} active={active} />;
-}
-
-// This one is only mounted when LiveKitRoom context exists, so the hook is safe
-function OpponentVoiceIndicatorConnected({ playerId, playerName, active }: { playerId: string; playerName: string; active: boolean }) {
+// Only mounted when LiveKitRoom context exists, so useParticipants() is safe.
+function OpponentVoiceLabel({ playerId, playerName, active }: { playerId: string; playerName: string; active: boolean }) {
   const participants = useParticipants();
   const speaking = participants.find((p) => p.identity === playerId)?.isSpeaking;
   const inVoice = participants.some((p) => p.identity === playerId);
@@ -633,8 +631,11 @@ type PlayerAreaProps = {
 };
 
 function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, onToggleSelect, onSwapTap, onPlayFaceUp, onPlayFaceDown, onPlay, onPickup, onReady, onNewGame }: PlayerAreaProps) {
+  const useFan = me.hand.length <= FAN_LIMIT;
+
   return (
-    <div className="pb-2">
+    <div className="pb-2 shrink-0">
+      {/* Face-down row */}
       <div className="flex justify-center gap-2 mb-1">
         {me.faceDown.map((c) => (
           <motion.button key={c.id} whileTap={{ scale: 0.95 }} onClick={() => onPlayFaceDown(c.id)} disabled={me.hand.length > 0 || me.faceUp.length > 0 || !isMyTurn || state.phase !== "playing"}>
@@ -643,6 +644,7 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
         ))}
       </div>
 
+      {/* Face-up row */}
       <div className="flex justify-center gap-2 mb-2 -mt-4">
         {me.faceUp.map((c) => (
           <motion.button
@@ -658,30 +660,15 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
         ))}
       </div>
 
-      <div className="flex justify-center items-end h-32 relative">
-        {me.hand.map((c, i) => {
-          const total = me.hand.length;
-          const spread = Math.min(total * 36, 280);
-          const offset = (i - (total - 1) / 2) * (spread / Math.max(total, 1));
-          const rot = (i - (total - 1) / 2) * 4;
-          const isSel = selected.includes(c.id) || swapPick.hand === c.id;
-          return (
-            <motion.button
-              key={c.id}
-              onClick={() => (state.phase === "swap" ? onSwapTap("hand", c.id) : onToggleSelect(c.id))}
-              className="absolute"
-              initial={{ y: 100, opacity: 0 }}
-              animate={{ x: offset, y: isSel ? -20 : 0, rotate: isSel ? 0 : rot, opacity: 1, scale: isSel ? 1.08 : 1 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20 }}
-              whileTap={{ scale: 1.1 }}
-              style={{ zIndex: isSel ? 50 : i }}
-            >
-              <Card card={c} size="md" highlight={isSel} special={isSpecial(c.r)} />
-            </motion.button>
-          );
-        })}
-      </div>
+      {/* Hand — fans for small hands, scrolls horizontally for big hands.
+          Either way it's confined to its own row above the action buttons. */}
+      {useFan ? (
+        <FanHand me={me} state={state} selected={selected} swapPick={swapPick} onToggleSelect={onToggleSelect} onSwapTap={onSwapTap} />
+      ) : (
+        <ScrollHand me={me} state={state} selected={selected} swapPick={swapPick} onToggleSelect={onToggleSelect} onSwapTap={onSwapTap} />
+      )}
 
+      {/* Action buttons — always visible, never blocked by cards */}
       <div className="flex justify-center gap-2 mt-2">
         {state.phase === "swap" ? (
           <button onClick={onReady} disabled={isReady} className="px-6 py-2 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold disabled:opacity-50 active:scale-95 transition">
@@ -708,10 +695,96 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
   );
 }
 
+type HandSubProps = {
+  me: Player;
+  state: GameState;
+  selected: string[];
+  swapPick: SwapPick;
+  onToggleSelect: (id: string) => void;
+  onSwapTap: (zone: SwapZone, id: string) => void;
+};
+
+// Fan layout — for hands of FAN_LIMIT or fewer
+function FanHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: HandSubProps) {
+  return (
+    <div className="flex justify-center items-end h-32 relative overflow-visible">
+      {me.hand.map((c, i) => {
+        const total = me.hand.length;
+        const spread = Math.min(total * 36, 240);
+        const offset = (i - (total - 1) / 2) * (spread / Math.max(total, 1));
+        const rot = (i - (total - 1) / 2) * 4;
+        const isSel = selected.includes(c.id) || swapPick.hand === c.id;
+        return (
+          <motion.button
+            key={c.id}
+            onClick={() => (state.phase === "swap" ? onSwapTap("hand", c.id) : onToggleSelect(c.id))}
+            className="absolute"
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ x: offset, y: isSel ? -20 : 0, rotate: isSel ? 0 : rot, opacity: 1, scale: isSel ? 1.08 : 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            whileTap={{ scale: 1.1 }}
+            style={{ zIndex: isSel ? 50 : i }}
+          >
+            <Card card={c} size="md" highlight={isSel} special={isSpecial(c.r)} />
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Horizontal-scroll layout — for big hands. Cards flow left-to-right, swipe to reach edges.
+function ScrollHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: HandSubProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const prevHandLen = useRef(me.hand.length);
+
+  // When a new card arrives, scroll to the right so the player sees it
+  useEffect(() => {
+    if (me.hand.length > prevHandLen.current && ref.current) {
+      ref.current.scrollTo({ left: ref.current.scrollWidth, behavior: "smooth" });
+    }
+    prevHandLen.current = me.hand.length;
+  }, [me.hand.length]);
+
+  return (
+    <div className="relative h-32">
+      {/* Edge fades to suggest scrollability */}
+      <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 z-10" style={{ background: "linear-gradient(to right, rgba(13, 31, 24, 1), transparent)" }} />
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10" style={{ background: "linear-gradient(to left, rgba(13, 31, 24, 1), transparent)" }} />
+
+      <div
+        ref={ref}
+        className="flex items-end h-full overflow-x-auto overflow-y-visible gap-2 px-4 pb-2 pt-6"
+        style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+      >
+        <style>{`
+          .hand-scroll::-webkit-scrollbar { display: none; }
+        `}</style>
+        {me.hand.map((c) => {
+          const isSel = selected.includes(c.id) || swapPick.hand === c.id;
+          return (
+            <motion.button
+              key={c.id}
+              onClick={() => (state.phase === "swap" ? onSwapTap("hand", c.id) : onToggleSelect(c.id))}
+              className="shrink-0"
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: isSel ? -12 : 0, opacity: 1, scale: isSel ? 1.08 : 1 }}
+              transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              whileTap={{ scale: 1.1 }}
+              style={{ zIndex: isSel ? 50 : 1 }}
+            >
+              <Card card={c} size="md" highlight={isSel} special={isSpecial(c.r)} />
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Card({ card, size = "md", highlight, special }: { card: CardType; size?: "sm" | "md"; highlight?: boolean; special?: boolean }) {
   const sizes = { sm: "w-12 h-16 text-xs", md: "w-16 h-24 text-base" };
 
-  // Build glow shadow: selection takes priority, then special, then default
   let boxShadow = "0 4px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.8)";
   if (highlight) {
     boxShadow = "0 8px 24px rgba(255, 200, 100, 0.5)";
