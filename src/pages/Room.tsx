@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import usePartySocket from "partysocket/react";
-import { LiveKitRoom, useParticipants, useLocalParticipant } from "@livekit/components-react";
+import { LiveKitRoom, useParticipants, useLocalParticipant, useRoomContext, RoomAudioRenderer, useStartAudio } from "@livekit/components-react";
 import "@livekit/components-styles";
 import type { GameState, Card as CardType, Player } from "../lib/game";
 import { rankLabel, isRed } from "../lib/game";
@@ -66,11 +66,29 @@ export default function Room() {
   if (voiceToken && voiceUrl) {
     return (
       <LiveKitRoom token={voiceToken} serverUrl={voiceUrl} connect audio video={false} onConnected={() => setVoiceConnected(true)} onDisconnected={() => setVoiceConnected(false)} className="contents">
+        <RoomAudioRenderer />
+        <StartAudioGate />
         {inner}
       </LiveKitRoom>
     );
   }
   return inner;
+}
+
+// Shows a tap-to-enable-audio overlay if the browser blocked autoplay (iOS Safari fix).
+function StartAudioGate() {
+  const room = useRoomContext();
+  const { mergedProps, canPlayAudio } = useStartAudio({ room, props: {} });
+  if (canPlayAudio) return null;
+  return (
+    <button
+      {...mergedProps}
+      className="fixed inset-x-0 bottom-20 mx-auto z-[60] px-6 py-3 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold w-max active:scale-95 transition shadow-2xl"
+      style={{ boxShadow: "0 0 40px rgba(255, 200, 100, 0.5)" }}
+    >
+      Tap to Enable Audio
+    </button>
+  );
 }
 
 type GameRoomProps = {
@@ -104,7 +122,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
         if (msg.type === "state") {
           setState(msg.state);
           setReadyPlayers(msg.ready || []);
-          if (msg.state.lastEvent?.type === "burn") triggerFlash("🔥 BURN");
+          if (msg.state.lastEvent?.type === "burn") triggerFlash("BURN");
           else if (msg.state.lastEvent?.type === "reset") triggerFlash("RESET");
           else if (msg.state.lastEvent?.type === "pickup") triggerFlash("PICK UP");
         } else if (msg.type === "error") {
@@ -134,7 +152,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
   if (!state) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "radial-gradient(ellipse at 50% 30%, #1a3a2e 0%, #0d1f18 50%, #050a08 100%)" }}>
-        <div className="text-amber-100/60 text-sm tracking-widest">CONNECTING…</div>
+        <div className="text-amber-100/60 text-sm tracking-widest">CONNECTING...</div>
       </div>
     );
   }
@@ -187,11 +205,11 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
 
       <div className="relative z-10 flex flex-col h-screen max-w-md mx-auto px-3 py-2">
         <div className="flex items-center justify-between pb-2">
-          <button onClick={() => nav("/")} className="text-amber-100/50 text-xs tracking-widest">← LEAVE</button>
+          <button onClick={() => nav("/")} className="text-amber-100/50 text-xs tracking-widest">LEAVE</button>
           <button onClick={copyCode} className="flex items-center gap-2 text-amber-100/80 hover:text-amber-100">
             <span className="text-[10px] tracking-[0.3em] uppercase">Room</span>
             <span className="text-2xl tracking-[0.3em] italic">{code}</span>
-            <span className="text-[10px] text-amber-200/60">{copied ? "✓" : "⧉"}</span>
+            <span className="text-[10px] text-amber-200/60">{copied ? "OK" : "copy"}</span>
           </button>
           {voiceConnected ? <VoiceControls /> : <div className="w-12" />}
         </div>
@@ -215,7 +233,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
               </div>
               {state.sevenActive && state.phase === "playing" && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="absolute top-2 right-2 text-[10px] tracking-[0.2em] text-amber-300/90 border border-amber-300/40 px-2 py-1 rounded-sm bg-amber-900/20">
-                  ≤ 7 ONLY
+                  &le; 7 ONLY
                 </motion.div>
               )}
             </div>
@@ -283,23 +301,23 @@ function Lobby({ state, playerId, isHost, onDeal, voiceConnected, hasVoiceToken,
           </div>
         ))}
         {Array.from({ length: Math.max(0, 4 - state.players.length) }).map((_, i) => (
-          <div key={`empty-${i}`} className="border border-dashed border-amber-100/10 px-4 py-3 rounded-sm text-amber-100/30 text-sm">empty seat…</div>
+          <div key={`empty-${i}`} className="border border-dashed border-amber-100/10 px-4 py-3 rounded-sm text-amber-100/30 text-sm">empty seat...</div>
         ))}
       </div>
 
       {!voiceConnected && !hasVoiceToken && (
         <button onClick={onRequestVoice} className="mb-3 px-5 py-2 border border-amber-100/40 text-amber-100 rounded-sm tracking-[0.2em] text-xs uppercase active:scale-95 transition">
-          🎙 Join Voice Chat
+          Join Voice Chat
         </button>
       )}
-      {voiceConnected && <div className="mb-3 text-emerald-300 text-xs tracking-[0.2em] uppercase">🎙 Voice Connected</div>}
+      {voiceConnected && <div className="mb-3 text-emerald-300 text-xs tracking-[0.2em] uppercase">Voice Connected</div>}
 
       {isHost ? (
         <button onClick={onDeal} disabled={state.players.length < 2} className="px-8 py-3 bg-amber-100 text-stone-900 rounded-sm tracking-[0.3em] text-xs uppercase font-semibold disabled:opacity-30 active:scale-95 transition">
           Deal Cards ({state.players.length}/4)
         </button>
       ) : (
-        <div className="text-amber-100/60 text-sm italic">waiting for host to deal…</div>
+        <div className="text-amber-100/60 text-sm italic">waiting for host to deal...</div>
       )}
     </div>
   );
@@ -315,7 +333,7 @@ function VoiceControls() {
   };
   return (
     <button onClick={toggleMute} className={`px-2 py-1 rounded-sm border text-[10px] tracking-widest ${muted ? "border-red-400/40 text-red-300" : "border-emerald-400/40 text-emerald-300"}`}>
-      {muted ? "🔇" : "🎙"}
+      {muted ? "MUTED" : "LIVE"}
     </button>
   );
 }
@@ -327,7 +345,6 @@ type OpponentProps = {
 };
 
 function Opponent({ player, active, voiceConnected }: OpponentProps) {
-  // Hooks must be called unconditionally
   const participants = useParticipants();
   const speaking = voiceConnected && participants.find((p) => p.identity === player.id)?.isSpeaking;
   const inVoice = voiceConnected && participants.some((p) => p.identity === player.id);
@@ -335,7 +352,7 @@ function Opponent({ player, active, voiceConnected }: OpponentProps) {
   return (
     <div className={`flex flex-col items-center transition-opacity ${active ? "opacity-100" : "opacity-50"} ${!player.connected ? "opacity-30" : ""}`}>
       <div className="flex items-center gap-1 mb-1">
-        {inVoice && <span className={`text-[8px] ${speaking ? "text-emerald-300 animate-pulse" : "text-amber-100/40"}`}>●</span>}
+        {inVoice && <span className={`text-[8px] ${speaking ? "text-emerald-300 animate-pulse" : "text-amber-100/40"}`}>&bull;</span>}
         <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : speaking ? "text-emerald-200" : "text-amber-100/50"}`}>{player.name}</div>
       </div>
       <div className="flex gap-0.5 mb-0.5">
@@ -350,7 +367,7 @@ function Opponent({ player, active, voiceConnected }: OpponentProps) {
           </div>
         ))}
       </div>
-      <div className="mt-1 text-[10px] text-amber-100/60 tracking-wider">{player.hand.length} 🂠</div>
+      <div className="mt-1 text-[10px] text-amber-100/60 tracking-wider">{player.hand.length} cards</div>
       {active && <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 rounded-full bg-amber-300 mt-1" />}
     </div>
   );
@@ -459,13 +476,13 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
       <div className="flex justify-center gap-2 mt-2">
         {state.phase === "swap" ? (
           <button onClick={onReady} disabled={isReady} className="px-6 py-2 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold disabled:opacity-50 active:scale-95 transition">
-            {isReady ? "Waiting for others…" : "Ready"}
+            {isReady ? "Waiting for others..." : "Ready"}
           </button>
         ) : state.phase === "over" ? (
           isHost ? (
             <button onClick={onNewGame} className="px-6 py-2 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold active:scale-95 transition">New Game</button>
           ) : (
-            <div className="text-amber-100/60 text-sm italic">waiting for host…</div>
+            <div className="text-amber-100/60 text-sm italic">waiting for host...</div>
           )
         ) : isMyTurn && me.hand.length > 0 ? (
           <>
@@ -507,7 +524,7 @@ function CardBack({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <div className={`${sizes[size]} rounded-lg border border-amber-200/30 shadow-lg relative overflow-hidden`} style={{ background: "linear-gradient(135deg, #7a1818 0%, #4a0e0e 100%)" }}>
       <div className="absolute inset-1 border border-amber-200/20 rounded-md flex items-center justify-center">
-        <div className="text-amber-200/30 text-xl italic">♣</div>
+        <div className="text-amber-200/30 text-xl italic">&clubs;</div>
       </div>
     </div>
   );
