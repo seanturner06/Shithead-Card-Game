@@ -4,10 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import usePartySocket from "partysocket/react";
 import { LiveKitRoom, useParticipants, useLocalParticipant } from "@livekit/components-react";
 import "@livekit/components-styles";
-import type { GameState, Card as CardType } from "../lib/game";
+import type { GameState, Card as CardType, Player } from "../lib/game";
 import { rankLabel, isRed } from "../lib/game";
 
 const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST || "127.0.0.1:1999";
+
+type SwapPick = { hand?: string; faceUp?: string };
+type SwapZone = "hand" | "faceUp";
 
 const getOrCreatePlayerId = () => {
   let id = localStorage.getItem("playerId");
@@ -70,12 +73,21 @@ export default function Room() {
   return inner;
 }
 
-function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoiceToken }: { code: string; playerId: string; name: string; voiceConnected: boolean; onRequestVoice: () => void; hasVoiceToken: boolean }) {
+type GameRoomProps = {
+  code: string;
+  playerId: string;
+  name: string;
+  voiceConnected: boolean;
+  onRequestVoice: () => void;
+  hasVoiceToken: boolean;
+};
+
+function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoiceToken }: GameRoomProps) {
   const nav = useNavigate();
   const [state, setState] = useState<GameState | null>(null);
   const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [swapPick, setSwapPick] = useState<{ hand?: string; faceUp?: string }>({});
+  const [swapPick, setSwapPick] = useState<SwapPick>({});
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -103,7 +115,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
     },
   });
 
-  const send = (msg: any) => socket.send(JSON.stringify(msg));
+  const send = (msg: unknown) => socket.send(JSON.stringify(msg));
   const triggerFlash = (t: string) => { setFlash(t); setTimeout(() => setFlash(null), 1300); };
 
   useEffect(() => {
@@ -138,10 +150,35 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
     if (!card) return;
     if (selected.includes(cardId)) setSelected(selected.filter((id) => id !== cardId));
     else {
-      const firstSel = selected[0] && me.hand.find((c) => c.id === selected[0]);
+      const firstSelId = selected[0];
+      const firstSel = firstSelId ? me.hand.find((c) => c.id === firstSelId) : undefined;
       if (!firstSel || firstSel.r === card.r) setSelected([...selected, cardId]);
       else setSelected([cardId]);
     }
+  };
+
+  const handleSwapTap = (zone: SwapZone, id: string) => {
+    if (state.phase !== "swap") return;
+    setSwapPick((s) => ({
+      ...s,
+      [zone]: s[zone] === id ? undefined : id,
+    }));
+  };
+
+  const handlePlayFaceUp = (id: string) => {
+    if (!me || me.hand.length > 0 || !isMyTurn) return;
+    send({ type: "play", cardIds: [id] });
+  };
+
+  const handlePlayFaceDown = (id: string) => {
+    if (!me || me.hand.length > 0 || me.faceUp.length > 0 || !isMyTurn) return;
+    send({ type: "play", cardIds: [id] });
+  };
+
+  const handlePlay = () => {
+    if (selected.length === 0) return;
+    send({ type: "play", cardIds: selected });
+    setSelected([]);
   };
 
   return (
@@ -197,23 +234,10 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
               isHost={isHost}
               isReady={readyPlayers.includes(playerId)}
               onToggleSelect={toggleSelect}
-              onSwapTap={(zone, id) => {
-                if (state.phase !== "swap") return;
-                setSwapPick((s) => ({ ...s, [zone]: s[zone] === id ? undefined : id }));
-              }}
-              onPlayFaceUp={(id) => {
-                if (!me || me.hand.length > 0 || !isMyTurn) return;
-                send({ type: "play", cardIds: [id] });
-              }}
-              onPlayFaceDown={(id) => {
-                if (!me || me.hand.length > 0 || me.faceUp.length > 0 || !isMyTurn) return;
-                send({ type: "play", cardIds: [id] });
-              }}
-              onPlay={() => {
-                if (selected.length === 0) return;
-                send({ type: "play", cardIds: selected });
-                setSelected([]);
-              }}
+              onSwapTap={handleSwapTap}
+              onPlayFaceUp={handlePlayFaceUp}
+              onPlayFaceDown={handlePlayFaceDown}
+              onPlay={handlePlay}
               onPickup={() => send({ type: "pickup" })}
               onReady={() => send({ type: "ready" })}
               onNewGame={() => send({ type: "newGame" })}
@@ -233,12 +257,22 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
   );
 }
 
-function Lobby({ state, playerId, isHost, onDeal, voiceConnected, hasVoiceToken, onRequestVoice }: any) {
+type LobbyProps = {
+  state: GameState;
+  playerId: string;
+  isHost: boolean;
+  onDeal: () => void;
+  voiceConnected: boolean;
+  hasVoiceToken: boolean;
+  onRequestVoice: () => void;
+};
+
+function Lobby({ state, playerId, isHost, onDeal, voiceConnected, hasVoiceToken, onRequestVoice }: LobbyProps) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-4">
       <div className="text-amber-100/60 text-xs tracking-[0.4em] uppercase mb-4">The Table</div>
       <div className="w-full max-w-xs space-y-2 mb-6">
-        {state.players.map((p: any) => (
+        {state.players.map((p) => (
           <div key={p.id} className="flex items-center justify-between bg-stone-900/40 border border-amber-100/10 px-4 py-3 rounded-sm">
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${p.connected ? "bg-emerald-400" : "bg-stone-600"}`} />
@@ -286,8 +320,15 @@ function VoiceControls() {
   );
 }
 
-function Opponent({ player, active, voiceConnected }: any) {
-  const participants = voiceConnected ? useParticipants() : [];
+type OpponentProps = {
+  player: Player;
+  active: boolean;
+  voiceConnected: boolean;
+};
+
+function Opponent({ player, active, voiceConnected }: OpponentProps) {
+  // Hooks must be called unconditionally
+  const participants = useParticipants();
   const speaking = voiceConnected && participants.find((p) => p.identity === player.id)?.isSpeaking;
   const inVoice = voiceConnected && participants.some((p) => p.identity === player.id);
 
@@ -298,12 +339,12 @@ function Opponent({ player, active, voiceConnected }: any) {
         <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : speaking ? "text-emerald-200" : "text-amber-100/50"}`}>{player.name}</div>
       </div>
       <div className="flex gap-0.5 mb-0.5">
-        {player.faceDown.slice(0, 3).map((_: any, i: number) => (
+        {player.faceDown.slice(0, 3).map((_, i) => (
           <div key={i} className="w-5 h-7 rounded bg-gradient-to-br from-red-900 to-red-950 border border-amber-200/20" />
         ))}
       </div>
       <div className="flex gap-0.5 -mt-3">
-        {player.faceUp.map((c: any) => (
+        {player.faceUp.map((c) => (
           <div key={c.id} className="w-5 h-7 rounded bg-stone-100 border border-stone-300 flex items-center justify-center text-[8px] font-bold" style={{ color: isRed(c.s) ? "#991b1b" : "#1c1917" }}>
             {rankLabel(c.r)}
           </div>
@@ -347,11 +388,29 @@ function PileStack({ pile }: { pile: CardType[] }) {
   );
 }
 
-function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, onToggleSelect, onSwapTap, onPlayFaceUp, onPlayFaceDown, onPlay, onPickup, onReady, onNewGame }: any) {
+type PlayerAreaProps = {
+  me: Player;
+  state: GameState;
+  selected: string[];
+  swapPick: SwapPick;
+  isMyTurn: boolean;
+  isHost: boolean;
+  isReady: boolean;
+  onToggleSelect: (id: string) => void;
+  onSwapTap: (zone: SwapZone, id: string) => void;
+  onPlayFaceUp: (id: string) => void;
+  onPlayFaceDown: (id: string) => void;
+  onPlay: () => void;
+  onPickup: () => void;
+  onReady: () => void;
+  onNewGame: () => void;
+};
+
+function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, onToggleSelect, onSwapTap, onPlayFaceUp, onPlayFaceDown, onPlay, onPickup, onReady, onNewGame }: PlayerAreaProps) {
   return (
     <div className="pb-2">
       <div className="flex justify-center gap-2 mb-1">
-        {me.faceDown.map((c: CardType) => (
+        {me.faceDown.map((c) => (
           <motion.button key={c.id} whileTap={{ scale: 0.95 }} onClick={() => onPlayFaceDown(c.id)} disabled={me.hand.length > 0 || me.faceUp.length > 0 || !isMyTurn || state.phase !== "playing"}>
             <CardBack size="sm" />
           </motion.button>
@@ -359,7 +418,7 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
       </div>
 
       <div className="flex justify-center gap-2 mb-2 -mt-4">
-        {me.faceUp.map((c: CardType) => (
+        {me.faceUp.map((c) => (
           <motion.button
             key={c.id}
             whileTap={{ scale: 0.95 }}
@@ -374,7 +433,7 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
       </div>
 
       <div className="flex justify-center items-end h-32 relative">
-        {me.hand.map((c: CardType, i: number) => {
+        {me.hand.map((c, i) => {
           const total = me.hand.length;
           const spread = Math.min(total * 36, 280);
           const offset = (i - (total - 1) / 2) * (spread / Math.max(total, 1));
