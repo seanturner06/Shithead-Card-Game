@@ -12,6 +12,17 @@ const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST || "127.0.0.1:1999";
 type SwapPick = { hand?: string; faceUp?: string };
 type SwapZone = "hand" | "faceUp";
 
+const isSpecial = (r: number) => r === 2 || r === 7 || r === 10;
+
+const SHITHEAD_LINES = [
+  "absolute clown behavior",
+  "you played like that on purpose?",
+  "this is your villain origin story",
+  "buy your friends a drink. they earned it",
+  "history will remember this",
+  "the cards have spoken. you stink",
+];
+
 const getOrCreatePlayerId = () => {
   let id = localStorage.getItem("playerId");
   if (!id) {
@@ -75,7 +86,6 @@ export default function Room() {
   return inner;
 }
 
-// Shows a tap-to-enable-audio overlay if the browser blocked autoplay (iOS Safari fix).
 function StartAudioGate() {
   const room = useRoomContext();
   const { mergedProps, canPlayAudio } = useStartAudio({ room, props: {} });
@@ -109,6 +119,8 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [shitheadLine, setShitheadLine] = useState("");
 
   const socket = usePartySocket({
     host: PARTYKIT_HOST,
@@ -120,11 +132,16 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "state") {
+          const prevPhase = state?.phase;
           setState(msg.state);
           setReadyPlayers(msg.ready || []);
           if (msg.state.lastEvent?.type === "burn") triggerFlash("BURN");
           else if (msg.state.lastEvent?.type === "reset") triggerFlash("RESET");
           else if (msg.state.lastEvent?.type === "pickup") triggerFlash("PICK UP");
+          // Pick a random shithead line when game ends
+          if (msg.state.phase === "over" && prevPhase !== "over") {
+            setShitheadLine(SHITHEAD_LINES[Math.floor(Math.random() * SHITHEAD_LINES.length)]);
+          }
         } else if (msg.type === "error") {
           setError(msg.error);
           setTimeout(() => setError(null), 2000);
@@ -161,6 +178,8 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
   const opponents = state.players.filter((p) => p.id !== playerId);
   const isHost = state.hostId === playerId;
   const isMyTurn = state.currentPlayerId === playerId;
+  const loser = state.loserId ? state.players.find((p) => p.id === state.loserId) : null;
+  const youLost = loser?.id === playerId;
 
   const toggleSelect = (cardId: string) => {
     if (!me) return;
@@ -199,6 +218,10 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
     setSelected([]);
   };
 
+  const handleNewGame = () => {
+    send({ type: "newGame" });
+  };
+
   return (
     <div className="min-h-screen w-full overflow-hidden relative" style={{ background: "radial-gradient(ellipse at 50% 30%, #1a3a2e 0%, #0d1f18 50%, #050a08 100%)" }}>
       <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255, 200, 100, 0.12) 0%, transparent 50%)" }} />
@@ -211,7 +234,16 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
             <span className="text-2xl tracking-[0.3em] italic">{code}</span>
             <span className="text-[10px] text-amber-200/60">{copied ? "OK" : "copy"}</span>
           </button>
-          {voiceConnected ? <VoiceControls /> : <div className="w-12" />}
+          <div className="flex items-center gap-2">
+            {voiceConnected ? <VoiceControls /> : <div className="w-12" />}
+            <button
+              onClick={() => setShowRules(true)}
+              className="w-7 h-7 rounded-full border border-amber-100/40 text-amber-100/70 hover:text-amber-100 hover:border-amber-100/70 flex items-center justify-center text-xs italic transition"
+              aria-label="Rules"
+            >
+              i
+            </button>
+          </div>
         </div>
 
         {state.phase === "lobby" && (
@@ -258,7 +290,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
               onPlay={handlePlay}
               onPickup={() => send({ type: "pickup" })}
               onReady={() => send({ type: "ready" })}
-              onNewGame={() => send({ type: "newGame" })}
+              onNewGame={handleNewGame}
             />
           </>
         )}
@@ -270,8 +302,167 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice, hasVoi
             </motion.div>
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {state.phase === "over" && loser && (
+            <ShitheadModal loserName={loser.name} youLost={youLost} line={shitheadLine} canRestart={isHost} onNewGame={handleNewGame} />
+          )}
+        </AnimatePresence>
       </div>
     </div>
+  );
+}
+
+function RulesModal({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.9, y: 10 }}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-stone-900/95 border border-amber-100/20 rounded-sm max-w-sm w-full max-h-[85vh] overflow-y-auto"
+      >
+        <div className="sticky top-0 bg-stone-900/95 backdrop-blur border-b border-amber-100/10 px-5 py-3 flex items-center justify-between">
+          <div className="text-amber-100/60 text-[10px] tracking-[0.4em] uppercase">House Rules</div>
+          <button onClick={onClose} className="text-amber-100/60 hover:text-amber-100 text-lg leading-none">&times;</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4 text-amber-50/90 text-sm">
+          <Section title="Goal">
+            <p>Get rid of all your cards. Last one holding cards is the <span className="italic text-amber-200">Shithead</span>.</p>
+          </Section>
+
+          <Section title="Setup">
+            <p>Each player gets 9 cards: 3 face-down (blind), 3 face-up on top of those, and 3 in hand. Before play starts, swap any cards between your hand and face-up row.</p>
+          </Section>
+
+          <Section title="Turn">
+            <p>Play a card equal to or higher than the top of the pile. Draw back up to 3 from the deck. Can't play? Pick up the whole pile.</p>
+            <p className="text-amber-100/60 text-xs italic">You can play multiple cards if they're the same rank.</p>
+          </Section>
+
+          <Section title="Special Cards">
+            <div className="space-y-2">
+              <SpecialRow rank="2" label="Reset">
+                Plays on anything. Next player can play anything too.
+              </SpecialRow>
+              <SpecialRow rank="7" label="Lower">
+                Next player must play a 7 or lower.
+              </SpecialRow>
+              <SpecialRow rank="10" label="Burn">
+                Burns the entire pile. You go again.
+              </SpecialRow>
+              <SpecialRow rank="4&times;" label="Burn">
+                Four of a kind on top of the pile (across one or several plays) burns it.
+              </SpecialRow>
+            </div>
+          </Section>
+
+          <Section title="Endgame">
+            <p>When your hand is empty, play your face-up cards. When those are gone, blindly tap a face-down card. If it can't play, you pick up the pile plus that card.</p>
+          </Section>
+
+          <div className="text-amber-100/40 text-[10px] tracking-widest uppercase pt-2 border-t border-amber-100/10">
+            specials are highlighted with a glow in your hand
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-amber-200/80 text-[10px] tracking-[0.3em] uppercase mb-1.5">{title}</div>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function SpecialRow({ rank, label, children }: { rank: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="shrink-0 w-10 h-12 rounded bg-gradient-to-br from-stone-50 to-stone-200 border border-amber-300 ring-1 ring-amber-300/40 flex items-center justify-center text-stone-900 font-bold text-sm" style={{ fontFamily: "Georgia, serif", boxShadow: "0 0 12px rgba(255, 200, 100, 0.3)" }} dangerouslySetInnerHTML={{ __html: rank }} />
+      <div className="flex-1">
+        <div className="text-amber-200 text-xs tracking-widest uppercase">{label}</div>
+        <div className="text-amber-50/80 text-xs">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ShitheadModal({ loserName, youLost, line, canRestart, onNewGame }: { loserName: string; youLost: boolean; line: string; canRestart: boolean; onNewGame: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/85 z-[55] flex items-center justify-center p-4 backdrop-blur-md"
+    >
+      <motion.div
+        initial={{ scale: 0.7, y: 30, rotate: -3 }}
+        animate={{ scale: 1, y: 0, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 200, damping: 15 }}
+        className="text-center max-w-xs"
+      >
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1, rotate: [0, -8, 8, -4, 4, 0] }}
+          transition={{ delay: 0.2, duration: 0.8, type: "spring" }}
+          className="text-8xl mb-4"
+        >
+          💩
+        </motion.div>
+        <div className="text-amber-100/50 text-[10px] tracking-[0.5em] uppercase mb-2">Game Over</div>
+        <div className="text-amber-100 text-4xl mb-2 italic" style={{ textShadow: "0 0 40px rgba(255, 200, 100, 0.4)" }}>
+          {youLost ? "You're the" : `${loserName} is the`}
+        </div>
+        <motion.div
+          initial={{ scale: 1.4, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.4, type: "spring" }}
+          className="text-red-300 text-5xl mb-4 italic font-bold"
+          style={{ fontFamily: "Cormorant Garamond, Georgia, serif", textShadow: "0 0 30px rgba(255, 100, 100, 0.5)" }}
+        >
+          SHITHEAD
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="text-amber-100/70 text-sm italic mb-6"
+        >
+          {line}
+        </motion.div>
+        {canRestart ? (
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1 }}
+            onClick={onNewGame}
+            className="px-8 py-3 bg-amber-100 text-stone-900 rounded-sm tracking-[0.3em] text-xs uppercase font-semibold active:scale-95 transition"
+          >
+            Deal Again
+          </motion.button>
+        ) : (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1 }} className="text-amber-100/50 text-xs tracking-widest uppercase">
+            waiting for host...
+          </motion.div>
+        )}
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -444,7 +635,7 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
             animate={{ y: swapPick.faceUp === c.id ? -8 : 0, scale: swapPick.faceUp === c.id ? 1.05 : 1 }}
             className="disabled:opacity-60"
           >
-            <Card card={c} size="sm" />
+            <Card card={c} size="sm" special={isSpecial(c.r)} />
           </motion.button>
         ))}
       </div>
@@ -467,7 +658,7 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
               whileTap={{ scale: 1.1 }}
               style={{ zIndex: isSel ? 50 : i }}
             >
-              <Card card={c} size="md" highlight={isSel} />
+              <Card card={c} size="md" highlight={isSel} special={isSpecial(c.r)} />
             </motion.button>
           );
         })}
@@ -499,12 +690,27 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
   );
 }
 
-function Card({ card, size = "md", highlight }: { card: CardType; size?: "sm" | "md"; highlight?: boolean }) {
+function Card({ card, size = "md", highlight, special }: { card: CardType; size?: "sm" | "md"; highlight?: boolean; special?: boolean }) {
   const sizes = { sm: "w-12 h-16 text-xs", md: "w-16 h-24 text-base" };
+
+  // Build glow shadow: selection takes priority, then special, then default
+  let boxShadow = "0 4px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.8)";
+  if (highlight) {
+    boxShadow = "0 8px 24px rgba(255, 200, 100, 0.5)";
+  } else if (special) {
+    boxShadow = "0 0 14px rgba(255, 200, 100, 0.55), 0 4px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.8)";
+  }
+
+  const borderClass = highlight
+    ? "border-amber-400 ring-2 ring-amber-300/60"
+    : special
+    ? "border-amber-300 ring-1 ring-amber-300/40"
+    : "border-stone-300";
+
   return (
     <div
-      className={`${sizes[size]} rounded-lg bg-gradient-to-br from-stone-50 to-stone-200 border ${highlight ? "border-amber-400 ring-2 ring-amber-300/60" : "border-stone-300"} shadow-lg flex flex-col justify-between p-1.5 relative overflow-hidden`}
-      style={{ boxShadow: highlight ? "0 8px 24px rgba(255, 200, 100, 0.4)" : "0 4px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.8)" }}
+      className={`${sizes[size]} rounded-lg bg-gradient-to-br from-stone-50 to-stone-200 border ${borderClass} shadow-lg flex flex-col justify-between p-1.5 relative overflow-hidden`}
+      style={{ boxShadow }}
     >
       <div className={`leading-none font-bold ${isRed(card.s) ? "text-red-700" : "text-stone-900"}`} style={{ fontFamily: "Georgia, serif" }}>
         <div>{rankLabel(card.r)}</div>
