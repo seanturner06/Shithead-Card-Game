@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #050a08;
+  color: #fef3c7;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+* { box-sizing: border-box; }
+button { -webkit-user-select: none; user-select: none; }

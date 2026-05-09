@@ -1,0 +1,8 @@
+{
+  "name": "shithead-party",
+  "main": "party/server.ts",
+  "compatibilityDate": "2024-09-01",
+  "vars": {
+    "LIVEKIT_URL": ""
+  }
+}
