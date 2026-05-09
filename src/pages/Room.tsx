@@ -536,16 +536,9 @@ type OpponentProps = {
 };
 
 function Opponent({ player, active, voiceConnected }: OpponentProps) {
-  const participants = useParticipants();
-  const speaking = voiceConnected && participants.find((p) => p.identity === player.id)?.isSpeaking;
-  const inVoice = voiceConnected && participants.some((p) => p.identity === player.id);
-
   return (
     <div className={`flex flex-col items-center transition-opacity ${active ? "opacity-100" : "opacity-50"} ${!player.connected ? "opacity-30" : ""}`}>
-      <div className="flex items-center gap-1 mb-1">
-        {inVoice && <span className={`text-[8px] ${speaking ? "text-emerald-300 animate-pulse" : "text-amber-100/40"}`}>&bull;</span>}
-        <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : speaking ? "text-emerald-200" : "text-amber-100/50"}`}>{player.name}</div>
-      </div>
+      <OpponentVoiceIndicator voiceConnected={voiceConnected} playerId={player.id} playerName={player.name} active={active} />
       <div className="flex gap-0.5 mb-0.5">
         {player.faceDown.slice(0, 3).map((_, i) => (
           <div key={i} className="w-5 h-7 rounded bg-gradient-to-br from-red-900 to-red-950 border border-amber-200/20" />
@@ -560,6 +553,31 @@ function Opponent({ player, active, voiceConnected }: OpponentProps) {
       </div>
       <div className="mt-1 text-[10px] text-amber-100/60 tracking-wider">{player.hand.length} cards</div>
       {active && <motion.div animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.5, repeat: Infinity }} className="w-1 h-1 rounded-full bg-amber-300 mt-1" />}
+    </div>
+  );
+}
+
+// Separate component so useParticipants is only called when voice is actually connected
+function OpponentVoiceIndicator({ voiceConnected, playerId, playerName, active }: { voiceConnected: boolean; playerId: string; playerName: string; active: boolean }) {
+  if (!voiceConnected) {
+    return (
+      <div className="flex items-center gap-1 mb-1">
+        <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : "text-amber-100/50"}`}>{playerName}</div>
+      </div>
+    );
+  }
+  return <OpponentVoiceIndicatorConnected playerId={playerId} playerName={playerName} active={active} />;
+}
+
+// This one is only mounted when LiveKitRoom context exists, so the hook is safe
+function OpponentVoiceIndicatorConnected({ playerId, playerName, active }: { playerId: string; playerName: string; active: boolean }) {
+  const participants = useParticipants();
+  const speaking = participants.find((p) => p.identity === playerId)?.isSpeaking;
+  const inVoice = participants.some((p) => p.identity === playerId);
+  return (
+    <div className="flex items-center gap-1 mb-1">
+      {inVoice && <span className={`text-[8px] ${speaking ? "text-emerald-300 animate-pulse" : "text-amber-100/40"}`}>&bull;</span>}
+      <div className={`text-[10px] tracking-[0.2em] uppercase ${active ? "text-amber-200" : speaking ? "text-emerald-200" : "text-amber-100/50"}`}>{playerName}</div>
     </div>
   );
 }
