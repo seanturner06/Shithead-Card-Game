@@ -632,21 +632,21 @@ type PlayerAreaProps = {
 function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, onToggleSelect, onSwapTap, onPlayFaceUp, onPlayFaceDown, onPlay, onPickup, onReady, onNewGame }: PlayerAreaProps) {
   const useFan = me.hand.length <= FAN_LIMIT;
 
-  // Pickup is allowed while playing the hand OR face-up cards (not face-down — that's a forced flip).
-  // The pile must also be non-empty.
+  // You're in face-down phase only when hand AND face-up are both empty.
+  const inFaceDownPhase = me.hand.length === 0 && me.faceUp.length === 0;
+
+  // Can pick up: it's your turn during play, there's a pile, and you're not in face-down phase.
   const canPickup =
     state.phase === "playing" &&
     isMyTurn &&
     state.pile.length > 0 &&
-    me.faceDown.length < 3 // i.e. not in pure face-down phase (no hand, no face-up)
-      ? me.hand.length > 0 || me.faceUp.length > 0
-      : false;
+    !inFaceDownPhase;
 
-  // Showing action buttons: during the playing phase, on your turn, when you have ANY playable zone.
+  // Show action buttons when you have a hand or face-up card to play.
   const showActions =
     state.phase === "playing" &&
     isMyTurn &&
-    (me.hand.length > 0 || me.faceUp.length > 0);
+    !inFaceDownPhase; 
 
   return (
     <div className="pb-2 shrink-0">
