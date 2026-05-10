@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import usePartySocket from "partysocket/react";
@@ -12,7 +12,8 @@ const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST || "127.0.0.1:1999";
 type SwapPick = { hand?: string; faceUp?: string };
 type SwapZone = "hand" | "faceUp";
 
-const isSpecial = (r: number) => r === 2 || r === 7 || r === 10;
+// 2, 3, 7, 10 all get the special-card glow
+const isSpecial = (r: number) => r === 2 || r === 3 || r === 7 || r === 10;
 
 const SHITHEAD_LINES = [
   "absolute clown behavior",
@@ -23,8 +24,6 @@ const SHITHEAD_LINES = [
   "the cards have spoken. you stink",
 ];
 
-// Hand fan looks great up to ~6 cards. Beyond that, switch to a horizontal scroll
-// strip so cards never overlap the action buttons or each other into illegibility.
 const FAN_LIMIT = 6;
 
 const getOrCreatePlayerId = () => {
@@ -229,7 +228,6 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice }: Game
       <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255, 200, 100, 0.12) 0%, transparent 50%)" }} />
 
       <div className="relative z-10 flex flex-col h-screen max-w-md mx-auto px-3 py-2">
-        {/* Header — voice button is persistent and joinable anytime */}
         <div className="flex items-center justify-between pb-2">
           <button onClick={() => nav("/")} className="text-amber-100/50 text-xs tracking-widest">LEAVE</button>
           <button onClick={copyCode} className="flex items-center gap-2 text-amber-100/80 hover:text-amber-100">
@@ -369,6 +367,9 @@ function RulesModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-2">
               <SpecialRow rank="2" label="Reset">
                 Plays on anything. Next player can play anything too.
+              </SpecialRow>
+              <SpecialRow rank="3" label="Invisible">
+                Plays on anything. The next player plays as if the 3 isn't there — they react to whatever's underneath.
               </SpecialRow>
               <SpecialRow rank="7" label="Lower">
                 Next player must play a 7 or lower.
@@ -538,7 +539,6 @@ type OpponentProps = {
   voiceConnected: boolean;
 };
 
-// Outer wrapper — never calls LiveKit hooks directly, so it's safe when voice isn't connected.
 function Opponent({ player, active, voiceConnected }: OpponentProps) {
   return (
     <div className={`flex flex-col items-center transition-opacity ${active ? "opacity-100" : "opacity-50"} ${!player.connected ? "opacity-30" : ""}`}>
@@ -567,7 +567,6 @@ function Opponent({ player, active, voiceConnected }: OpponentProps) {
   );
 }
 
-// Only mounted when LiveKitRoom context exists, so useParticipants() is safe.
 function OpponentVoiceLabel({ playerId, playerName, active }: { playerId: string; playerName: string; active: boolean }) {
   const participants = useParticipants();
   const speaking = participants.find((p) => p.identity === playerId)?.isSpeaking;
@@ -633,9 +632,24 @@ type PlayerAreaProps = {
 function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, onToggleSelect, onSwapTap, onPlayFaceUp, onPlayFaceDown, onPlay, onPickup, onReady, onNewGame }: PlayerAreaProps) {
   const useFan = me.hand.length <= FAN_LIMIT;
 
+  // Pickup is allowed while playing the hand OR face-up cards (not face-down — that's a forced flip).
+  // The pile must also be non-empty.
+  const canPickup =
+    state.phase === "playing" &&
+    isMyTurn &&
+    state.pile.length > 0 &&
+    me.faceDown.length < 3 // i.e. not in pure face-down phase (no hand, no face-up)
+      ? me.hand.length > 0 || me.faceUp.length > 0
+      : false;
+
+  // Showing action buttons: during the playing phase, on your turn, when you have ANY playable zone.
+  const showActions =
+    state.phase === "playing" &&
+    isMyTurn &&
+    (me.hand.length > 0 || me.faceUp.length > 0);
+
   return (
     <div className="pb-2 shrink-0">
-      {/* Face-down row */}
       <div className="flex justify-center gap-2 mb-1">
         {me.faceDown.map((c) => (
           <motion.button key={c.id} whileTap={{ scale: 0.95 }} onClick={() => onPlayFaceDown(c.id)} disabled={me.hand.length > 0 || me.faceUp.length > 0 || !isMyTurn || state.phase !== "playing"}>
@@ -644,7 +658,6 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
         ))}
       </div>
 
-      {/* Face-up row */}
       <div className="flex justify-center gap-2 mb-2 -mt-4">
         {me.faceUp.map((c) => (
           <motion.button
@@ -660,15 +673,17 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
         ))}
       </div>
 
-      {/* Hand — fans for small hands, scrolls horizontally for big hands.
-          Either way it's confined to its own row above the action buttons. */}
-      {useFan ? (
-        <FanHand me={me} state={state} selected={selected} swapPick={swapPick} onToggleSelect={onToggleSelect} onSwapTap={onSwapTap} />
+      {/* Render hand area only when there's a hand. When hand is empty, hide it so action row sits closer to face-up. */}
+      {me.hand.length > 0 ? (
+        useFan ? (
+          <FanHand me={me} state={state} selected={selected} swapPick={swapPick} onToggleSelect={onToggleSelect} onSwapTap={onSwapTap} />
+        ) : (
+          <ScrollHand me={me} state={state} selected={selected} swapPick={swapPick} onToggleSelect={onToggleSelect} onSwapTap={onSwapTap} />
+        )
       ) : (
-        <ScrollHand me={me} state={state} selected={selected} swapPick={swapPick} onToggleSelect={onToggleSelect} onSwapTap={onSwapTap} />
+        <div className="h-2" />
       )}
 
-      {/* Action buttons — always visible, never blocked by cards */}
       <div className="flex justify-center gap-2 mt-2">
         {state.phase === "swap" ? (
           <button onClick={onReady} disabled={isReady} className="px-6 py-2 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold disabled:opacity-50 active:scale-95 transition">
@@ -680,15 +695,25 @@ function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, 
           ) : (
             <div className="text-amber-100/60 text-sm italic">waiting for host...</div>
           )
-        ) : isMyTurn && me.hand.length > 0 ? (
+        ) : showActions ? (
           <>
-            <button onClick={onPlay} disabled={selected.length === 0} className="px-5 py-2 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold disabled:opacity-30 active:scale-95 transition">
-              Play {selected.length > 1 ? `(${selected.length})` : ""}
-            </button>
-            <button onClick={onPickup} disabled={state.pile.length === 0} className="px-5 py-2 border border-amber-100/40 text-amber-100 rounded-sm tracking-[0.2em] text-xs uppercase disabled:opacity-30 active:scale-95 transition">Pick Up</button>
+            {/* Play button only when there's something selected (hand mode); face-up cards play on tap. */}
+            {me.hand.length > 0 && (
+              <button onClick={onPlay} disabled={selected.length === 0} className="px-5 py-2 bg-amber-100 text-stone-900 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold disabled:opacity-30 active:scale-95 transition">
+                Play {selected.length > 1 ? `(${selected.length})` : ""}
+              </button>
+            )}
+            {canPickup && (
+              <button onClick={onPickup} className="px-5 py-2 border border-amber-100/40 text-amber-100 rounded-sm tracking-[0.2em] text-xs uppercase active:scale-95 transition">
+                Pick Up
+              </button>
+            )}
+            {me.hand.length === 0 && me.faceUp.length > 0 && (
+              <div className="text-amber-100/80 text-sm italic">tap a face-up card</div>
+            )}
           </>
-        ) : isMyTurn ? (
-          <div className="text-amber-100/80 text-sm italic">tap a card above to play</div>
+        ) : isMyTurn && state.phase === "playing" && me.faceDown.length > 0 ? (
+          <div className="text-amber-100/80 text-sm italic">tap a face-down card (blind!)</div>
         ) : null}
       </div>
     </div>
@@ -704,7 +729,6 @@ type HandSubProps = {
   onSwapTap: (zone: SwapZone, id: string) => void;
 };
 
-// Fan layout — for hands of FAN_LIMIT or fewer
 function FanHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: HandSubProps) {
   return (
     <div className="flex justify-center items-end h-32 relative overflow-visible">
@@ -733,34 +757,41 @@ function FanHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: H
   );
 }
 
-// Horizontal-scroll layout — for big hands. Cards flow left-to-right, swipe to reach edges.
 function ScrollHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: HandSubProps) {
   const ref = useRef<HTMLDivElement>(null);
   const prevHandLen = useRef(me.hand.length);
 
-  // When a new card arrives, scroll to the right so the player sees it
+  // Sort by rank ascending for easier scanning. Stable secondary sort by id keeps the order
+  // deterministic across renders and across clients.
+  const sortedHand = useMemo(() => {
+    return [...me.hand].sort((a, b) => {
+      if (a.r !== b.r) return a.r - b.r;
+      return a.id.localeCompare(b.id);
+    });
+  }, [me.hand]);
+
   useEffect(() => {
     if (me.hand.length > prevHandLen.current && ref.current) {
-      ref.current.scrollTo({ left: ref.current.scrollWidth, behavior: "smooth" });
+      // New card drawn — gently flash a scroll cue. Don't auto-scroll since the hand is sorted
+      // and the new card might land in the middle, not at the end.
+      const el = ref.current;
+      el.scrollTo({ left: 0, behavior: "smooth" });
     }
     prevHandLen.current = me.hand.length;
   }, [me.hand.length]);
 
   return (
     <div className="relative h-32">
-      {/* Edge fades to suggest scrollability */}
       <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 z-10" style={{ background: "linear-gradient(to right, rgba(13, 31, 24, 1), transparent)" }} />
       <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 z-10" style={{ background: "linear-gradient(to left, rgba(13, 31, 24, 1), transparent)" }} />
 
       <div
         ref={ref}
-        className="flex items-end h-full overflow-x-auto overflow-y-visible gap-2 px-4 pb-2 pt-6"
+        className="hand-scroll flex items-end h-full overflow-x-auto overflow-y-visible gap-2 px-4 pb-2 pt-6"
         style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
       >
-        <style>{`
-          .hand-scroll::-webkit-scrollbar { display: none; }
-        `}</style>
-        {me.hand.map((c) => {
+        <style>{`.hand-scroll::-webkit-scrollbar { display: none; }`}</style>
+        {sortedHand.map((c) => {
           const isSel = selected.includes(c.id) || swapPick.hand === c.id;
           return (
             <motion.button

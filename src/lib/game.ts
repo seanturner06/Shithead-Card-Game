@@ -33,7 +33,7 @@ const RANKS = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 2];
 export const rankLabel = (r: number) =>
   ({ 11: "J", 12: "Q", 13: "K", 14: "A" } as Record<number, string>)[r] || String(r);
 export const isRed = (s: Suit) => s === "♥" || s === "♦";
-const isSpecial = (r: number) => r === 2 || r === 10;
+const isSpecial = (r: number) => r === 2 || r === 3 || r === 10;
 
 export function buildDeck(): Card[] {
   const deck: Card[] = [];
@@ -45,19 +45,37 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
+// "Effective top" of the pile — skip 3s, since 3s are invisible.
+// If the entire pile is 3s, treat as empty (anything plays).
+function effectiveTop(pile: Card[]): Card | null {
+  for (let i = pile.length - 1; i >= 0; i--) {
+    if (pile[i].r !== 3) return pile[i];
+  }
+  return null;
+}
+
 export function canPlayOn(card: Card, pile: Card[], sevenActive: boolean): boolean {
-  if (card.r === 2 || card.r === 10) return true;
-  if (pile.length === 0) return true;
-  const top = pile[pile.length - 1];
-  if (top.r === 2) return true;
+  // 2, 3, 10 always playable
+  if (card.r === 2 || card.r === 3 || card.r === 10) return true;
+  const top = effectiveTop(pile);
+  if (!top) return true; // empty pile (or all 3s)
+  if (top.r === 2) return true; // reset means anything goes
   if (sevenActive) return card.r <= 7;
   return card.r >= top.r;
 }
 
+// Four of a kind — count from the top, ignoring 3s (since 3s are invisible).
+// Returns true when the top 4 non-3 cards on the pile are all the same rank.
 export function fourOfAKindTop(pile: Card[]): boolean {
-  if (pile.length < 4) return false;
-  const last4 = pile.slice(-4);
-  return last4.every((c) => c.r === last4[0].r);
+  const visible: Card[] = [];
+  for (let i = pile.length - 1; i >= 0; i--) {
+    if (pile[i].r !== 3) {
+      visible.push(pile[i]);
+      if (visible.length === 4) break;
+    }
+  }
+  if (visible.length < 4) return false;
+  return visible.every((c) => c.r === visible[0].r);
 }
 
 export function createInitialState(hostId: string, hostName: string): GameState {
@@ -178,23 +196,31 @@ export function applyPlay(state: GameState, playerId: string, cardIds: string[])
 
   let burnPile = state.burnPile;
   let newPile = pile;
-  let sevenActive = false;
+  let sevenActive = state.sevenActive; // 3 preserves the previous state — see below
   let extraTurn = false;
   let message = `${player.name} played ${rankLabel(cards[0].r)}`;
   let eventType = "play";
 
   if (cards[0].r === 10) {
     burnPile = [...burnPile, ...pile]; newPile = []; extraTurn = true;
+    sevenActive = false;
     message = `${player.name} burned the pile 🔥`; eventType = "burn";
   } else if (fourOfAKindTop(pile)) {
     burnPile = [...burnPile, ...pile]; newPile = []; extraTurn = true;
+    sevenActive = false;
     message = `Four of a kind! ${player.name} burned 🔥`; eventType = "burn";
   } else if (cards[0].r === 2) {
     sevenActive = false;
     message = `${player.name} played a 2 — reset`; eventType = "reset";
+  } else if (cards[0].r === 3) {
+    // 3 is invisible — leave sevenActive as it was, since the 3 doesn't change pile state
+    message = `${player.name} played a 3 — invisible`;
+    eventType = "play";
   } else if (cards[0].r === 7) {
     sevenActive = true;
     message = `${player.name} played 7 — next ≤7`;
+  } else {
+    sevenActive = false;
   }
 
   if (player.hand.length === 0 && player.faceUp.length === 0 && player.faceDown.length === 0) {
