@@ -30,6 +30,7 @@ import { LiveKitRoom, useParticipants, useLocalParticipant, useRoomContext, Room
 import "@livekit/components-styles";
 import type { GameState, Card as CardType, Player } from "../lib/game";
 import { rankLabel, isRed } from "../lib/game";
+import { getPlayerName, setPlayerName } from "../lib/playerName";
 
 /**
  * PartyKit host. In production this is set via the `VITE_PARTYKIT_HOST`
@@ -104,8 +105,10 @@ export default function Room() {
   const [voiceConnected, setVoiceConnected] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("playerName");
+    const stored = getPlayerName();
     if (!stored) { nav("/"); return; }
+    // Touch the timestamp so an active session doesn't expire mid-game.
+    setPlayerName(stored);
     setName(stored);
     setPlayerId(getOrCreatePlayerId());
   }, [nav]);

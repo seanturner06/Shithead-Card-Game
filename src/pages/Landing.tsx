@@ -13,6 +13,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { getPlayerName, setPlayerName } from "../lib/playerName";
 
 /**
  * Generate a 4-character room code from a no-confusable alphabet.
@@ -40,19 +41,19 @@ export default function Landing() {
   const [mode, setMode] = useState<"choose" | "join">("choose");
 
   useEffect(() => {
-    const saved = localStorage.getItem("playerName");
+    const saved = getPlayerName();
     if (saved) setName(saved);
   }, []);
 
   const handleCreate = () => {
     if (!name.trim()) return;
-    localStorage.setItem("playerName", name);
+    setPlayerName(name);
     nav(`/room/${generateCode()}`);
   };
 
   const handleJoin = () => {
     if (!name.trim() || code.length !== 4) return;
-    localStorage.setItem("playerName", name);
+    setPlayerName(name);
     nav(`/room/${code.toUpperCase()}`);
   };
 

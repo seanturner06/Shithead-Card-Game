@@ -1,1 +1,1 @@
-{"root":["./src/main.tsx","./src/lib/game.test.ts","./src/lib/game.ts","./src/pages/landing.tsx","./src/pages/room.tsx","./party/server.ts"],"version":"5.9.3"}
+{"root":["./src/main.tsx","./src/lib/game.test.ts","./src/lib/game.ts","./src/lib/playername.test.ts","./src/lib/playername.ts","./src/pages/landing.tsx","./src/pages/room.tsx","./party/server.ts"],"version":"5.9.3"}
