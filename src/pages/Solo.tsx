@@ -275,9 +275,22 @@ export default function Solo() {
     <div className="min-h-screen w-full overflow-hidden relative" style={{ background: "radial-gradient(ellipse at 50% 30%, #1a3a2e 0%, #0d1f18 50%, #050a08 100%)" }}>
       <div className="pointer-events-none fixed inset-0" style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(255, 200, 100, 0.12) 0%, transparent 50%)" }} />
 
-      <div className="relative z-10 flex flex-col h-screen max-w-md mx-auto px-3 py-2">
-        <div className="flex items-center justify-between pb-2">
-          <button onClick={() => nav("/")} className="text-amber-100/50 text-xs tracking-widest">LEAVE</button>
+      <div
+        className="relative z-10 flex flex-col h-screen max-w-md mx-auto"
+        style={{
+          paddingTop: "max(0.5rem, env(safe-area-inset-top))",
+          paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))",
+          paddingLeft: "max(0.75rem, env(safe-area-inset-left))",
+          paddingRight: "max(0.75rem, env(safe-area-inset-right))",
+        }}
+      >
+        <div className="flex items-center justify-between pb-2 gap-2">
+          <button
+            onClick={() => nav("/")}
+            className="px-2 py-2 -my-2 text-amber-100/50 text-xs tracking-widest active:scale-95 transition"
+          >
+            LEAVE
+          </button>
           <div className="flex items-center gap-2 text-amber-100/80">
             <span className="text-[10px] tracking-[0.3em] uppercase">Vs</span>
             <span className="text-base tracking-[0.3em] italic">Computer</span>
@@ -285,7 +298,7 @@ export default function Solo() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowRules(true)}
-              className="w-7 h-7 rounded-full border border-amber-100/40 text-amber-100/70 hover:text-amber-100 hover:border-amber-100/70 flex items-center justify-center text-xs italic transition"
+              className="w-10 h-10 rounded-full border border-amber-100/40 text-amber-100/70 hover:text-amber-100 hover:border-amber-100/70 flex items-center justify-center text-sm italic transition active:scale-95"
               aria-label="Rules"
             >
               i
