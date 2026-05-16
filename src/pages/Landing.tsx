@@ -1,7 +1,25 @@
+/**
+ * @file Landing page — the create/join screen at `/`.
+ *
+ * Two states:
+ * - `choose` — name input + Create or Join buttons.
+ * - `join` — name persisted, 4-character code input + Join Room button.
+ *
+ * Name is persisted to `localStorage` as `playerName` so returning visitors
+ * skip the typing. The actual player identity (`playerId`) is generated
+ * lazily on the room page, not here.
+ */
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
+/**
+ * Generate a 4-character room code from a no-confusable alphabet.
+ *
+ * The alphabet omits ambiguous glyphs (0/O, 1/I/L) so codes read cleanly
+ * when shouted across a room or typed on a phone.
+ */
 const generateCode = () => {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
   let s = "";
@@ -9,6 +27,12 @@ const generateCode = () => {
   return s;
 };
 
+/**
+ * Landing page component. Mounted at `/`.
+ *
+ * Navigates to `/room/:code` once the user has a name and either created
+ * a new code or typed an existing one.
+ */
 export default function Landing() {
   const nav = useNavigate();
   const [name, setName] = useState("");

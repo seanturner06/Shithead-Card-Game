@@ -1,3 +1,27 @@
+/**
+ * @file Room page — lobby + active game + voice integration. Mounted at `/room/:code`.
+ *
+ * This file holds the bulk of the UI. Three structural layers:
+ *
+ * 1. **`Room`** — outer wrapper. Bootstraps the player identity, fetches a
+ *    LiveKit voice token on demand, and conditionally wraps the inner
+ *    component tree in `<LiveKitRoom>` so voice hooks have their context.
+ *
+ * 2. **`GameRoom`** — the real component. Opens the PartyKit websocket,
+ *    receives state snapshots, dispatches actions, and renders the lobby /
+ *    game / game-over views.
+ *
+ * 3. **Sub-components** — `Lobby`, `Opponent`, `PlayerArea`, `FanHand`,
+ *    `ScrollHand`, `Card`, modals, etc.
+ *
+ * Important architectural note: the LiveKit `<LiveKitRoom>` provider is
+ * mounted *only when voice is connected*. Hooks like `useParticipants()`
+ * crash if used outside that provider, so they live in `OpponentVoiceLabel`
+ * — a sub-component that only mounts inside the provider. `Opponent` itself
+ * (the outer component) is voice-agnostic so non-voice players can render
+ * normally.
+ */
+
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -7,12 +31,27 @@ import "@livekit/components-styles";
 import type { GameState, Card as CardType, Player } from "../lib/game";
 import { rankLabel, isRed } from "../lib/game";
 
+/**
+ * PartyKit host. In production this is set via the `VITE_PARTYKIT_HOST`
+ * environment variable at build time (e.g. `shithead-party.YOURNAME.partykit.dev`).
+ * Local dev defaults to PartyKit's local dev server on port 1999.
+ */
 const PARTYKIT_HOST = import.meta.env.VITE_PARTYKIT_HOST || "127.0.0.1:1999";
 
+/** Tracks which hand card + face-up card the player has tapped during swap phase. */
 type SwapPick = { hand?: string; faceUp?: string };
+
+/** Which row of the player's cards a tap originated from during swap phase. */
 type SwapZone = "hand" | "faceUp";
 
-// 2, 3, 7, 10 all get the special-card glow
+/**
+ * Ranks that get the amber "special card" glow in the hand.
+ *
+ * Note this differs from the engine's `isSpecial` (which is {2, 3, 10} — ranks
+ * that bypass the normal "≥ top" rule). The UI also glows 7s because they
+ * have a meaningful side-effect (forcing the next play ≤ 7) even though
+ * they're not always-playable.
+ */
 const isSpecial = (r: number) => r === 2 || r === 3 || r === 7 || r === 10;
 
 const SHITHEAD_LINES = [
@@ -24,8 +63,19 @@ const SHITHEAD_LINES = [
   "the cards have spoken. you stink",
 ];
 
+/**
+ * Hand size threshold at which the layout switches from a fanned arc
+ * (≤6 cards) to a horizontal scrollable strip (≥7 cards). The fan looks
+ * great with few cards but gets crowded past 6.
+ */
 const FAN_LIMIT = 6;
 
+/**
+ * Get a stable per-browser player id, generating one if this is the first visit.
+ *
+ * Persisted to localStorage so a reload or wifi drop preserves the same
+ * identity — the server restores the seat by matching `playerId` on `join`.
+ */
 const getOrCreatePlayerId = () => {
   let id = localStorage.getItem("playerId");
   if (!id) {
@@ -35,6 +85,14 @@ const getOrCreatePlayerId = () => {
   return id;
 };
 
+/**
+ * Outer Room component. Handles player identity, voice token fetching, and
+ * conditional wrapping in the LiveKit provider.
+ *
+ * Renders `null` until name + playerId are resolved (a flash of the wrong
+ * thing on mount is worse than a one-frame blank). Redirects to `/` if no
+ * name is stored — you can't deep-link into a room without a name.
+ */
 export default function Room() {
   const { code } = useParams<{ code: string }>();
   const nav = useNavigate();
@@ -89,6 +147,14 @@ export default function Room() {
   return inner;
 }
 
+/**
+ * Workaround for iOS Safari's audio-after-gesture requirement.
+ *
+ * iOS won't auto-play remote audio tracks until the user has tapped *something*
+ * after page load. `useStartAudio` reports whether playback is currently
+ * allowed; if not, we render a floating "Tap to Enable Audio" button that
+ * unlocks it. Once `canPlayAudio` is true the button unmounts.
+ */
 function StartAudioGate() {
   const room = useRoomContext();
   const { mergedProps, canPlayAudio } = useStartAudio({ room, props: {} });
@@ -112,6 +178,19 @@ type GameRoomProps = {
   onRequestVoice: () => void;
 };
 
+/**
+ * Inner game component. Owns the websocket and renders the active room view.
+ *
+ * State responsibilities:
+ * - `state` — last server snapshot. Treat as read-only; never mutate locally.
+ *   The server is authoritative — to change anything, call `send(...)`.
+ * - `selected` — card ids the player has tapped in their hand, ready to play.
+ *   Same-rank only (enforced by `toggleSelect`).
+ * - `swapPick` — during swap phase, which hand and which face-up card are
+ *   pending the swap. When both are set, the effect below sends the swap.
+ * - `flash` / `error` — transient UI overlays. Auto-clear via setTimeout.
+ * - `showRules`, `shitheadLine` — modal-related.
+ */
 function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice }: GameRoomProps) {
   const nav = useNavigate();
   const [state, setState] = useState<GameState | null>(null);
@@ -539,6 +618,15 @@ type OpponentProps = {
   voiceConnected: boolean;
 };
 
+/**
+ * Renders one opponent: name, face-down stack, face-up row, hand count, and
+ * an active-turn indicator.
+ *
+ * Voice-agnostic by design — this component is mounted both inside and
+ * outside the `<LiveKitRoom>` provider. The voice-aware bits live in
+ * {@link OpponentVoiceLabel}, which we only render when `voiceConnected`
+ * is true (guaranteeing it's inside the provider).
+ */
 function Opponent({ player, active, voiceConnected }: OpponentProps) {
   return (
     <div className={`flex flex-col items-center transition-opacity ${active ? "opacity-100" : "opacity-50"} ${!player.connected ? "opacity-30" : ""}`}>
@@ -567,6 +655,13 @@ function Opponent({ player, active, voiceConnected }: OpponentProps) {
   );
 }
 
+/**
+ * Voice-aware opponent name label. Shows a speaking-indicator dot when the
+ * opponent is mid-utterance.
+ *
+ * Must be rendered inside `<LiveKitRoom>` — `useParticipants` crashes
+ * outside the provider context.
+ */
 function OpponentVoiceLabel({ playerId, playerName, active }: { playerId: string; playerName: string; active: boolean }) {
   const participants = useParticipants();
   const speaking = participants.find((p) => p.identity === playerId)?.isSpeaking;
@@ -629,6 +724,19 @@ type PlayerAreaProps = {
   onNewGame: () => void;
 };
 
+/**
+ * The current player's area at the bottom of the screen.
+ *
+ * Layered top-to-bottom:
+ * 1. Row of face-down card backs (tappable in face-down phase only).
+ * 2. Row of face-up cards (tappable for swap during swap phase, or to play
+ *    once hand is empty).
+ * 3. Hand — `FanHand` if ≤{@link FAN_LIMIT} cards, else `ScrollHand`.
+ * 4. Action button row — Ready / Play / Pickup / New Game depending on phase.
+ *
+ * The component is purely presentational. All state lives in the parent
+ * `GameRoom`; all actions are sent up via the `on*` callbacks.
+ */
 function PlayerArea({ me, state, selected, swapPick, isMyTurn, isHost, isReady, onToggleSelect, onSwapTap, onPlayFaceUp, onPlayFaceDown, onPlay, onPickup, onReady, onNewGame }: PlayerAreaProps) {
   const useFan = me.hand.length <= FAN_LIMIT;
 
@@ -729,6 +837,11 @@ type HandSubProps = {
   onSwapTap: (zone: SwapZone, id: string) => void;
 };
 
+/**
+ * Cards spread in a fanned arc — used when the hand has ≤{@link FAN_LIMIT} cards.
+ * Each card is absolutely positioned with a per-index x-offset and rotation
+ * to produce the curve. Selected cards lift up and straighten.
+ */
 function FanHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: HandSubProps) {
   return (
     <div className="flex justify-center items-end h-32 relative overflow-visible">
@@ -757,6 +870,14 @@ function FanHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: H
   );
 }
 
+/**
+ * Cards in a horizontally-scrollable strip — used when the hand is too big
+ * for a fan to read cleanly (>{@link FAN_LIMIT} cards).
+ *
+ * Sorted by rank ascending with a stable secondary sort on card id, so the
+ * order is deterministic across renders and across clients (helpful for
+ * remembering where a card is when discussing the hand).
+ */
 function ScrollHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }: HandSubProps) {
   const ref = useRef<HTMLDivElement>(null);
   const prevHandLen = useRef(me.hand.length);
@@ -813,6 +934,13 @@ function ScrollHand({ me, state, selected, swapPick, onToggleSelect, onSwapTap }
   );
 }
 
+/**
+ * Render one face-up playing card.
+ *
+ * - `highlight` — the card is currently selected (lifted, glowing).
+ * - `special` — the card has a special rule effect (2/3/7/10). Gets the
+ *   amber glow even when not selected.
+ */
 function Card({ card, size = "md", highlight, special }: { card: CardType; size?: "sm" | "md"; highlight?: boolean; special?: boolean }) {
   const sizes = { sm: "w-12 h-16 text-xs", md: "w-16 h-24 text-base" };
 
@@ -847,6 +975,7 @@ function Card({ card, size = "md", highlight, special }: { card: CardType; size?
   );
 }
 
+/** Render the back of a card — used for the deck stack and face-down rows. */
 function CardBack({ size = "md" }: { size?: "sm" | "md" }) {
   const sizes = { sm: "w-12 h-16", md: "w-16 h-24" };
   return (
