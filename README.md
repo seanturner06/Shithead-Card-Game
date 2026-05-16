@@ -4,11 +4,10 @@ A web app where you create a room, share a 4-letter code, and play with up to 3 
 
 ## Architecture (deliberately minimal)
 
-- **Frontend**: Vite + React + Tailwind, deployed as static files on Vercel
+- **Frontend**: Vite + React + Tailwind, deployed as static files on Render
 - **Backend**: PartyKit handles BOTH game state (WebSocket) AND voice token minting (HTTP) in a single server
 - **Voice**: LiveKit Cloud for the actual WebRTC audio stream
-
-Two services to deploy. That's it. No serverless functions, no Next.js machinery, no DB.
+  Two services to deploy. That's it. No serverless functions, no Next.js machinery, no DB.
 
 ## Local development
 
@@ -37,6 +36,7 @@ npm run dev             # Vite on http://localhost:3000
 ## Deploy to production
 
 ### Step 1: Push to GitHub
+
 ```bash
 git init && git add . && git commit -m "Initial"
 # Create a repo on github.com, then:
@@ -62,11 +62,13 @@ npx partykit secret put LIVEKIT_URL
 ```
 
 Now deploy:
+
 ```bash
 npm run deploy:party
 ```
 
 You'll see output like:
+
 ```
 ✓ Deployed shithead-party to https://shithead-party.YOURNAME.partykit.dev
 ```
