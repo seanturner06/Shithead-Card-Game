@@ -6,12 +6,14 @@
   "scripts": {
     "dev": "vite",
     "dev:party": "partykit dev",
+    "prebuild": "npm run icons",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy:party": "partykit deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@livekit/components-react": "^2.6.0",
@@ -31,6 +33,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.41",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.3",
     "vite": "^5.4.1",

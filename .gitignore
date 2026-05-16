@@ -7,3 +7,11 @@ dist/
 *.log
 .DS_Store
 .claude
+
+# PWA icons — generated from public/icon.svg via `npm run icons` (also runs on prebuild).
+# The SVG is the source of truth; PNGs are build artifacts.
+public/icon-192.png
+public/icon-512.png
+public/icon-maskable-512.png
+public/apple-touch-icon.png
+public/favicon-32.png
