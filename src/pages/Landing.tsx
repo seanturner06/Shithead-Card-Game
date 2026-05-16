@@ -11,10 +11,36 @@
  * lazily on the room page, not here.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { getPlayerName, setPlayerName } from "../lib/playerName";
+
+/**
+ * Detect whether the page is currently running as an installed PWA (standalone
+ * mode). Used to hide the install hint once the user has already installed.
+ *
+ * Two checks because the standards aren't aligned: Chrome / modern browsers
+ * expose `display-mode: standalone` via media query, but iOS Safari uses the
+ * non-standard `navigator.standalone` boolean instead.
+ */
+const isStandalone = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+};
+
+/** Which install instruction to show, or `null` to hide the hint entirely. */
+const detectInstallPlatform = (): "ios" | "android" | null => {
+  if (typeof navigator === "undefined") return null;
+  if (isStandalone()) return null;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return "ios";
+  if (/Android/.test(ua)) return "android";
+  return null;
+};
 
 /**
  * Generate a 4-character room code from a no-confusable alphabet.
@@ -40,6 +66,9 @@ export default function Landing() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<"choose" | "join">("choose");
+  // Resolved once on mount — platform doesn't change during a session, so a
+  // single read avoids re-running the UA sniff on every render.
+  const installPlatform = useMemo(() => detectInstallPlatform(), []);
 
   useEffect(() => {
     const saved = getPlayerName();
@@ -93,6 +122,21 @@ export default function Landing() {
             <button disabled={!name.trim()} onClick={() => setMode("join")} className="w-full text-amber-100/60 hover:text-amber-100 px-4 py-2 rounded-sm tracking-[0.2em] text-xs uppercase disabled:opacity-30 transition">
               Have a code? Join Room
             </button>
+            {installPlatform && (
+              <div className="pt-6 text-center text-amber-100/40 text-[10px] tracking-[0.25em] uppercase leading-relaxed">
+                {installPlatform === "ios" ? (
+                  <>
+                    Tap <span className="text-amber-100/70 not-italic">⬆︎</span> Share <span className="text-amber-100/70">→</span> "Add to Home Screen"
+                    <div className="text-[9px] tracking-widest text-amber-100/30 mt-1 normal-case">opens like an app</div>
+                  </>
+                ) : (
+                  <>
+                    Open menu <span className="text-amber-100/70 not-italic">⋮</span> <span className="text-amber-100/70">→</span> "Install app"
+                    <div className="text-[9px] tracking-widest text-amber-100/30 mt-1 normal-case">opens like an app</div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
