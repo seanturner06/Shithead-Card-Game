@@ -136,8 +136,10 @@ export function buildDeck(): Card[] {
  *
  * Returns `null` if the pile is empty OR consists entirely of 3s. Both cases
  * mean "anything plays next" since 3s are invisible.
+ *
+ * Exported so the UI can show "what's under the 3" in the pile peek interaction.
  */
-function effectiveTop(pile: Card[]): Card | null {
+export function effectiveTop(pile: Card[]): Card | null {
   for (let i = pile.length - 1; i >= 0; i--) {
     if (pile[i].r !== 3) return pile[i];
   }
@@ -423,7 +425,11 @@ export function applyPlay(state: GameState, playerId: string, cardIds: string[])
     return { state: { ...state, players, deck, pile: newPile, burnPile, sevenActive, phase: "over", loserId: stillIn[0].id, message: `${stillIn[0].name} is the Shithead 💩`, lastEvent: { type: "gameover", ts: Date.now() } } };
   }
 
-  const currentPlayerId = extraTurn ? playerId : nextPlayerId(players, playerId);
+  // If the player earned an extra turn (10 burn or four-of-a-kind) but went
+  // out on that same play, hand the turn to the next active player instead —
+  // they have no cards to play, so the extra turn is meaningless and would
+  // deadlock the game.
+  const currentPlayerId = extraTurn && !player.finished ? playerId : nextPlayerId(players, playerId);
   return { state: { ...state, players, deck, pile: newPile, burnPile, sevenActive, currentPlayerId, message, lastEvent: { type: eventType, playerId, ts: Date.now() } } };
 }
 

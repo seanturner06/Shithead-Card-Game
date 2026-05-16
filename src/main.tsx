@@ -2,8 +2,9 @@
  * @file React entry point. Mounts the app into `#root` and wires up routing.
  *
  * Routes:
- * - `/` → {@link Landing} (create / join screen)
- * - `/room/:code` → {@link Room} (lobby + game + voice)
+ * - `/` → {@link Landing} (create / join / solo screen)
+ * - `/room/:code` → {@link Room} (lobby + multiplayer game + voice)
+ * - `/solo` → {@link Solo} (single-player vs 3 bots)
  *
  * Uses `BrowserRouter` (HTML5 History API), so production needs an SPA
  * rewrite rule on the host (Render dashboard rewrite or `public/_redirects`)
@@ -15,6 +16,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Room from "./pages/Room";
+import Solo from "./pages/Solo";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -23,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/room/:code" element={<Room />} />
+        <Route path="/solo" element={<Solo />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

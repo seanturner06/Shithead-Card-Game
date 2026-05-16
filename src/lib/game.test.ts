@@ -520,6 +520,27 @@ describe("applyPlay — special cards", () => {
 });
 
 describe("applyPlay — face-up and face-down", () => {
+  it("plays multiple same-rank face-up cards in one go", () => {
+    const s = baseState({
+      currentPlayerId: "a",
+      deck: [],
+      players: [
+        player("a", {
+          hand: [],
+          faceUp: [card(7, "♠", "7s"), card(7, "♥", "7h"), card(11, "♣", "Jc")],
+          faceDown: [card(4), card(5), card(6)],
+        }),
+        player("b"),
+      ],
+      pile: [card(5, "♦", "5d")],
+    });
+    const { state, error } = applyPlay(s, "a", ["7s", "7h"]);
+    expect(error).toBeUndefined();
+    expect(state.players[0].faceUp).toHaveLength(1);
+    expect(state.players[0].faceUp[0].id).toBe("Jc");
+    expect(state.pile.map((c) => c.id)).toEqual(["5d", "7s", "7h"]);
+  });
+
   it("plays from face-up once the hand is empty", () => {
     const s = baseState({
       currentPlayerId: "a",
@@ -609,6 +630,50 @@ describe("applyPlay — finishing and game over", () => {
     const { state } = applyPlay(s, "a", ["J♠"]);
     expect(state.phase).toBe("over");
     expect(state.loserId).toBe("c");
+  });
+
+  it("passes the turn to the next active player when finishing with a burn", () => {
+    // Regression: a player who finished their last card via a 10 (or
+    // four-of-a-kind) used to keep the turn because of the burn's
+    // extra-turn rule. With no cards left to play, the game deadlocked.
+    const s = baseState({
+      currentPlayerId: "a",
+      deck: [],
+      players: [
+        player("a", { hand: [card(10, "♠", "10s")], faceUp: [], faceDown: [] }),
+        player("b", { hand: [card(5)] }),
+        player("c", { hand: [card(6)] }),
+      ],
+      pile: [card(7, "♥", "7h")],
+    });
+    const { state } = applyPlay(s, "a", ["10s"]);
+    expect(state.players[0].finished).toBe(true);
+    expect(state.currentPlayerId).toBe("b");
+  });
+
+  it("passes the turn when finishing with a four-of-a-kind", () => {
+    const s = baseState({
+      currentPlayerId: "a",
+      deck: [],
+      players: [
+        player("a", {
+          hand: [
+            card(5, "♠", "5s"),
+            card(5, "♥", "5h"),
+            card(5, "♦", "5d"),
+            card(5, "♣", "5c"),
+          ],
+          faceUp: [],
+          faceDown: [],
+        }),
+        player("b", { hand: [card(8)] }),
+        player("c", { hand: [card(9)] }),
+      ],
+      pile: [],
+    });
+    const { state } = applyPlay(s, "a", ["5s", "5h", "5d", "5c"]);
+    expect(state.players[0].finished).toBe(true);
+    expect(state.currentPlayerId).toBe("b");
   });
 });
 

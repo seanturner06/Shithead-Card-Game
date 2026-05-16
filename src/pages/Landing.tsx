@@ -1,8 +1,9 @@
 /**
- * @file Landing page — the create/join screen at `/`.
+ * @file Landing page — the entry screen at `/`.
  *
- * Two states:
- * - `choose` — name input + Create or Join buttons.
+ * Three states:
+ * - `choose` — name input + three options (Play with Friends, Play vs Computer,
+ *   Join with Code).
  * - `join` — name persisted, 4-character code input + Join Room button.
  *
  * Name is persisted to `localStorage` as `playerName` so returning visitors
@@ -31,8 +32,8 @@ const generateCode = () => {
 /**
  * Landing page component. Mounted at `/`.
  *
- * Navigates to `/room/:code` once the user has a name and either created
- * a new code or typed an existing one.
+ * Navigates to `/room/:code` for multiplayer or `/solo` for vs-computer once
+ * the user has a name.
  */
 export default function Landing() {
   const nav = useNavigate();
@@ -49,6 +50,12 @@ export default function Landing() {
     if (!name.trim()) return;
     setPlayerName(name);
     nav(`/room/${generateCode()}`);
+  };
+
+  const handleSolo = () => {
+    if (!name.trim()) return;
+    setPlayerName(name);
+    nav("/solo");
   };
 
   const handleJoin = () => {
@@ -78,10 +85,13 @@ export default function Landing() {
               className="w-full bg-stone-900/60 border border-amber-100/20 text-amber-50 px-4 py-3 rounded-sm focus:outline-none focus:border-amber-200/60 placeholder:text-amber-100/30"
             />
             <button disabled={!name.trim()} onClick={handleCreate} className="w-full bg-amber-100 text-stone-900 px-4 py-3 rounded-sm tracking-[0.2em] text-xs uppercase font-semibold disabled:opacity-30 active:scale-95 transition">
-              Create Room
+              Play with Friends
             </button>
-            <button disabled={!name.trim()} onClick={() => setMode("join")} className="w-full border border-amber-100/40 text-amber-100 px-4 py-3 rounded-sm tracking-[0.2em] text-xs uppercase disabled:opacity-30 active:scale-95 transition">
-              Join with Code
+            <button disabled={!name.trim()} onClick={handleSolo} className="w-full border border-amber-100/40 text-amber-100 px-4 py-3 rounded-sm tracking-[0.2em] text-xs uppercase disabled:opacity-30 active:scale-95 transition">
+              Play vs Computer
+            </button>
+            <button disabled={!name.trim()} onClick={() => setMode("join")} className="w-full text-amber-100/60 hover:text-amber-100 px-4 py-2 rounded-sm tracking-[0.2em] text-xs uppercase disabled:opacity-30 transition">
+              Have a code? Join Room
             </button>
           </div>
         ) : (
