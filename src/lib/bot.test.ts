@@ -31,6 +31,7 @@ const baseState = (overrides: Partial<GameState> = {}): GameState => ({
   loserId: null,
   lastEvent: null,
   hostId: "bot",
+  shitheadLine: null,
   ...overrides,
 });
 

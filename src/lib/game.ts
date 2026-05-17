@@ -93,7 +93,60 @@ export type GameState = {
   loserId: string | null;
   lastEvent: { type: string; playerId?: string; ts: number } | null;
   hostId: string;
+  /**
+   * The "you're the shithead" punchline shown to every client when the game
+   * ends. Picked once by the engine in `applyPlay` and stored here so that
+   * all players see the same line — otherwise each client would roll its own
+   * and we'd get four different insults at the same loser.
+   *
+   * `null` until the game transitions to `phase: "over"`.
+   */
+  shitheadLine: string | null;
 };
+
+/**
+ * Pool of game-over punchlines. The engine picks one at random when the game
+ * ends and stores it on {@link GameState.shitheadLine}, so it's broadcast
+ * once and every connected client renders the same one.
+ */
+export const SHITHEAD_LINES = [
+  "absolute clown behavior",
+  "you played like that on purpose?",
+  "this is your villain origin story",
+  "buy your friends a drink. they earned it",
+  "history will remember this",
+  "the cards have spoken. you stink",
+  "the deck wept for you tonight",
+  "somewhere a card counter just retired in shame",
+  "the dealer wants a word. privately.",
+  "the pile is filing a restraining order",
+  "you held those cards like they were emotionally distant",
+  "statistically bad. spiritually worse.",
+  "they're naming a new losing streak after you",
+  "the 2s are organizing a strike",
+  "tell your face cards we're sorry",
+  "future generations will use this as a cautionary tale",
+  "you played that hand like you were being held hostage",
+  "the deck has unionized. you're not invited.",
+  "someone should check on the cards after that",
+  "we don't allow this kind of play in polite company",
+  "the pile is composing a tell-all",
+  "you played those cards like they owed you money",
+  "the 10 of spades is in therapy because of you",
+  "they wrote a song about this. it's not a happy one.",
+  "you played with the confidence of someone who was wrong",
+  "the dealer is updating their resume",
+  "we're petitioning to take your name off the leaderboard",
+  "an entire deck is requesting hazard pay",
+  "the cards have started a group chat without you",
+  "the room has gone quiet. unsupportively.",
+  "even the bots are sending condolences",
+];
+
+/** Pick a random shithead line. Extracted so the engine and tests can share it. */
+function pickShitheadLine(): string {
+  return SHITHEAD_LINES[Math.floor(Math.random() * SHITHEAD_LINES.length)];
+}
 
 const SUITS: Suit[] = ["♠", "♥", "♦", "♣"];
 // 2 sorts last so it isn't picked as the "lowest non-special" starter card.
@@ -211,6 +264,7 @@ export function createInitialState(hostId: string, hostName: string): GameState 
     loserId: null,
     lastEvent: null,
     hostId,
+    shitheadLine: null,
   };
 }
 
@@ -422,7 +476,7 @@ export function applyPlay(state: GameState, playerId: string, cardIds: string[])
 
   const stillIn = players.filter((p) => !p.finished);
   if (stillIn.length === 1) {
-    return { state: { ...state, players, deck, pile: newPile, burnPile, sevenActive, phase: "over", loserId: stillIn[0].id, message: `${stillIn[0].name} is the Shithead 💩`, lastEvent: { type: "gameover", ts: Date.now() } } };
+    return { state: { ...state, players, deck, pile: newPile, burnPile, sevenActive, phase: "over", loserId: stillIn[0].id, message: `${stillIn[0].name} is the Shithead 💩`, lastEvent: { type: "gameover", ts: Date.now() }, shitheadLine: pickShitheadLine() } };
   }
 
   // If the player earned an extra turn (10 burn or four-of-a-kind) but went

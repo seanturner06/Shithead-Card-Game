@@ -30,7 +30,6 @@ import { getPlayerName, setPlayerName } from "../lib/playerName";
 import {
   type SwapPick,
   type SwapZone,
-  SHITHEAD_LINES,
   Opponent,
   DeckStack,
   PileStack,
@@ -236,7 +235,6 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice }: Game
   const [joinError, setJoinError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
-  const [shitheadLine, setShitheadLine] = useState("");
   // Tracks whether we've ever received a `state` snapshot. An error received
   // before the first state means the join itself failed (room full / game in
   // progress) — that's terminal, not a transient action error.
@@ -252,16 +250,12 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice }: Game
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === "state") {
-          const prevPhase = state?.phase;
           hasReceivedStateRef.current = true;
           setState(msg.state);
           setReadyPlayers(msg.ready || []);
           if (msg.state.lastEvent?.type === "burn") triggerFlash("BURN");
           else if (msg.state.lastEvent?.type === "reset") triggerFlash("RESET");
           else if (msg.state.lastEvent?.type === "pickup") triggerFlash("PICK UP");
-          if (msg.state.phase === "over" && prevPhase !== "over") {
-            setShitheadLine(SHITHEAD_LINES[Math.floor(Math.random() * SHITHEAD_LINES.length)]);
-          }
         } else if (msg.type === "error") {
           if (hasReceivedStateRef.current) {
             setError(msg.error);
@@ -473,7 +467,7 @@ function GameRoom({ code, playerId, name, voiceConnected, onRequestVoice }: Game
 
         <AnimatePresence>
           {state.phase === "over" && loser && (
-            <ShitheadModal loserName={loser.name} youLost={youLost} line={shitheadLine} canRestart={isHost} onNewGame={handleNewGame} />
+            <ShitheadModal loserName={loser.name} youLost={youLost} line={state.shitheadLine ?? ""} canRestart={isHost} onNewGame={handleNewGame} />
           )}
         </AnimatePresence>
       </div>

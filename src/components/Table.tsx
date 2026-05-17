@@ -32,15 +32,6 @@ export type SwapZone = "hand" | "faceUp";
  */
 export const isSpecial = (r: number) => r === 2 || r === 3 || r === 7 || r === 10;
 
-export const SHITHEAD_LINES = [
-  "absolute clown behavior",
-  "you played like that on purpose?",
-  "this is your villain origin story",
-  "buy your friends a drink. they earned it",
-  "history will remember this",
-  "the cards have spoken. you stink",
-];
-
 /**
  * Hand size threshold at which the layout switches from a fanned arc (≤6 cards)
  * to a horizontal scrollable strip (≥7 cards). The fan looks great with few

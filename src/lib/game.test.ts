@@ -11,6 +11,7 @@ import {
   applySwap,
   applyPlay,
   applyPickup,
+  SHITHEAD_LINES,
   type Card,
   type GameState,
   type Player,
@@ -46,6 +47,7 @@ const baseState = (overrides: Partial<GameState> = {}): GameState => ({
   loserId: null,
   lastEvent: null,
   hostId: "a",
+  shitheadLine: null,
   ...overrides,
 });
 
@@ -630,6 +632,39 @@ describe("applyPlay — finishing and game over", () => {
     const { state } = applyPlay(s, "a", ["J♠"]);
     expect(state.phase).toBe("over");
     expect(state.loserId).toBe("c");
+  });
+
+  it("stamps a single shithead line onto state when the game ends", () => {
+    // Critical for multiplayer: the line is picked once on the server and
+    // shipped in the state snapshot, so every connected client renders the
+    // same insult instead of rolling their own.
+    const s = baseState({
+      currentPlayerId: "a",
+      deck: [],
+      players: [
+        player("a", { hand: [card(11, "♠", "J♠")], faceUp: [], faceDown: [] }),
+        player("b", { hand: [card(4)] }),
+      ],
+    });
+    const { state } = applyPlay(s, "a", ["J♠"]);
+    expect(state.phase).toBe("over");
+    expect(state.shitheadLine).not.toBeNull();
+    expect(SHITHEAD_LINES).toContain(state.shitheadLine);
+  });
+
+  it("leaves shitheadLine null while the game is still in progress", () => {
+    const s = baseState({
+      currentPlayerId: "a",
+      deck: [],
+      players: [
+        player("a", { hand: [card(5)] }),
+        player("b", { hand: [card(6)] }),
+        player("c", { hand: [card(7)] }),
+      ],
+    });
+    const { state } = applyPlay(s, "a", [s.players[0].hand[0].id]);
+    expect(state.phase).toBe("playing");
+    expect(state.shitheadLine).toBeNull();
   });
 
   it("passes the turn to the next active player when finishing with a burn", () => {

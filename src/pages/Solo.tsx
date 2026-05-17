@@ -33,7 +33,6 @@ import { getPlayerName } from "../lib/playerName";
 import {
   type SwapPick,
   type SwapZone,
-  SHITHEAD_LINES,
   Opponent,
   DeckStack,
   PileStack,
@@ -101,14 +100,10 @@ export default function Solo() {
   const [flash, setFlash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
-  const [shitheadLine, setShitheadLine] = useState("");
 
   // Track which lastEvent we've already flashed for, so we don't re-flash on
   // unrelated state updates (selection changes, etc.).
   const lastEventTsRef = useRef<number | null>(null);
-  // Track previous phase to detect the swap→over transition for the shithead
-  // line.
-  const prevPhaseRef = useRef<GameState["phase"] | undefined>(undefined);
 
   // Initialize once on mount. The human's name is read from localStorage
   // (set during the landing page flow); falls back to "You" for direct-link
@@ -162,14 +157,6 @@ export default function Solo() {
     else if (e.type === "reset") triggerFlash("RESET");
     else if (e.type === "pickup") triggerFlash("PICK UP");
   }, [state?.lastEvent]);
-
-  // Pick a random "you stink" line the moment the game ends.
-  useEffect(() => {
-    if (state?.phase === "over" && prevPhaseRef.current !== "over") {
-      setShitheadLine(SHITHEAD_LINES[Math.floor(Math.random() * SHITHEAD_LINES.length)]);
-    }
-    prevPhaseRef.current = state?.phase;
-  }, [state?.phase]);
 
   // Swap-phase: when both hand and face-up are picked, perform the swap.
   useEffect(() => {
@@ -266,9 +253,7 @@ export default function Solo() {
     setState(buildInitialState(humanName));
     setSelected([]);
     setSwapPick({});
-    setShitheadLine("");
     lastEventTsRef.current = null;
-    prevPhaseRef.current = undefined;
   };
 
   return (
@@ -368,7 +353,7 @@ export default function Solo() {
 
         <AnimatePresence>
           {state.phase === "over" && loser && (
-            <ShitheadModal loserName={loser.name} youLost={youLost} line={shitheadLine} canRestart={true} onNewGame={handleNewGame} />
+            <ShitheadModal loserName={loser.name} youLost={youLost} line={state.shitheadLine ?? ""} canRestart={true} onNewGame={handleNewGame} />
           )}
         </AnimatePresence>
       </div>
