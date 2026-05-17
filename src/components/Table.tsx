@@ -242,11 +242,20 @@ export function Opponent({ player, active, voiceLabel }: OpponentProps) {
   );
 }
 
+/**
+ * The draw-deck visual at the center of the table. Two `CardBack`s offset
+ * slightly to suggest a stack — both carry the Parlor monogram, matching
+ * the face-down cards in the player's row.
+ */
 export function DeckStack() {
   return (
     <div className="relative w-16 h-24">
-      <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-red-900 to-red-950 border border-amber-200/30 shadow-lg" style={{ transform: "translate(-2px,-2px)" }} />
-      <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-red-800 to-red-950 border border-amber-200/40 shadow-xl" />
+      <div className="absolute" style={{ transform: "translate(-2px,-2px)" }}>
+        <CardBack size="md" />
+      </div>
+      <div className="absolute">
+        <CardBack size="md" />
+      </div>
     </div>
   );
 }
@@ -613,13 +622,53 @@ export function Card({ card, size = "md", highlight, special }: { card: CardType
   );
 }
 
-/** Render the back of a card — used for the deck stack and face-down rows. */
+/**
+ * Render the back of a card — used for the deck stack and face-down rows.
+ *
+ * Custom Parlor monogram: an italic "P" in a vintage diamond medallion,
+ * amber-on-deep-red. Stylistically borrows from late-19th-century playing
+ * card backs (concentric framing + central crest). Drawn as inline SVG so
+ * it scales cleanly at every render size without rasterizing.
+ */
 export function CardBack({ size = "md" }: { size?: "sm" | "md" }) {
   const sizes = { sm: "w-12 h-16", md: "w-16 h-24" };
   return (
     <div className={`${sizes[size]} rounded-lg border border-amber-200/30 shadow-lg relative overflow-hidden`} style={{ background: "linear-gradient(135deg, #7a1818 0%, #4a0e0e 100%)" }}>
-      <div className="absolute inset-1 border border-amber-200/20 rounded-md flex items-center justify-center">
-        <div className="text-amber-200/30 text-xl italic">&clubs;</div>
+      <div className="absolute inset-1 border border-amber-200/20 rounded-md overflow-hidden">
+        <svg viewBox="0 0 40 60" className="w-full h-full" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          {/* Outer diamond medallion */}
+          <path
+            d="M 20 10 L 33 30 L 20 50 L 7 30 Z"
+            fill="none"
+            stroke="rgb(252 211 77 / 0.35)"
+            strokeWidth="0.6"
+          />
+          {/* Inner diamond — thinner, gives the nested-frame vintage feel */}
+          <path
+            d="M 20 16 L 28 30 L 20 44 L 12 30 Z"
+            fill="none"
+            stroke="rgb(252 211 77 / 0.22)"
+            strokeWidth="0.4"
+          />
+          {/* Corner ornaments — small dots reading as classic deco filigree */}
+          <circle cx="5" cy="5" r="0.7" fill="rgb(252 211 77 / 0.4)" />
+          <circle cx="35" cy="5" r="0.7" fill="rgb(252 211 77 / 0.4)" />
+          <circle cx="5" cy="55" r="0.7" fill="rgb(252 211 77 / 0.4)" />
+          <circle cx="35" cy="55" r="0.7" fill="rgb(252 211 77 / 0.4)" />
+          {/* The Parlor monogram — italic serif P, the brand glyph */}
+          <text
+            x="20"
+            y="36.5"
+            fontFamily="Cormorant Garamond, Georgia, serif"
+            fontSize="16"
+            fontStyle="italic"
+            fontWeight="600"
+            textAnchor="middle"
+            fill="rgb(252 211 77 / 0.6)"
+          >
+            P
+          </text>
+        </svg>
       </div>
     </div>
   );
