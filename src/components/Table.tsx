@@ -226,12 +226,12 @@ export function Opponent({ player, active, voiceLabel }: OpponentProps) {
       )}
       <div className="flex gap-0.5 mb-0.5">
         {player.faceDown.slice(0, 3).map((_, i) => (
-          <div key={i} className="w-5 h-7 rounded bg-gradient-to-br from-red-900 to-red-950 border border-amber-200/20" />
+          <div key={i} className="w-7 h-10 rounded bg-gradient-to-br from-red-900 to-red-950 border border-amber-200/20" />
         ))}
       </div>
-      <div className="flex gap-0.5 -mt-3">
+      <div className="flex gap-0.5 -mt-4">
         {player.faceUp.map((c) => (
-          <div key={c.id} className="w-5 h-7 rounded bg-stone-100 border border-stone-300 flex items-center justify-center text-[8px] font-bold" style={{ color: isRed(c.s) ? "#991b1b" : "#1c1917" }}>
+          <div key={c.id} className="w-7 h-10 rounded bg-stone-100 border border-stone-300 flex items-center justify-center text-xs font-bold" style={{ color: isRed(c.s) ? "#991b1b" : "#1c1917" }}>
             {rankLabel(c.r)}
           </div>
         ))}
